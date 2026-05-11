@@ -27,6 +27,13 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Inject API Key
+        run: |
+          sed -i "s/REPLACE_ME_GEMINI_API_KEY/${{ secrets.GEMINI_API_KEY }}/g" src/environments/environment.ts
+        if: env.HAS_SECRET == 'true'
+        env:
+          HAS_SECRET: ${{ secrets.GEMINI_API_KEY != '' }}
+
       - name: Build Angular App
         run: npm run build
 

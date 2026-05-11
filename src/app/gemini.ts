@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { GoogleGenAI, Type } from '@google/genai';
 import { ClassSession } from './models';
+import { environment } from '../environments/environment';
 
 declare const GEMINI_API_KEY: string | undefined;
 
@@ -9,12 +10,19 @@ export class GeminiService {
   private getClient() {
     let key: string | undefined;
     
-    // 1. Try global variable (AI Studio Environment)
-    try {
-      key = GEMINI_API_KEY;
-    } catch (e) {}
+    // 1. Try Environment (Baked in during build)
+    if (environment.GEMINI_API_KEY && environment.GEMINI_API_KEY !== 'REPLACE_ME_GEMINI_API_KEY') {
+      key = environment.GEMINI_API_KEY;
+    }
 
-    // 2. Try localStorage (User provided in APK)
+    // 2. Try global variable (AI Studio Preview Environment)
+    if (!key) {
+      try {
+        key = GEMINI_API_KEY;
+      } catch (e) {}
+    }
+
+    // 3. Try localStorage (Manual input fallback)
     if (!key || key === 'undefined') {
       key = localStorage.getItem('user_gemini_key') || undefined;
     }

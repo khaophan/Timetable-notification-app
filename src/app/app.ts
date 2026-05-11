@@ -7,6 +7,7 @@ import { GeminiService } from './gemini';
 import { NotificationService } from './notification';
 import { ClassSession } from './models';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { environment } from '../environments/environment';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -29,6 +30,14 @@ export class App implements OnInit {
   newMappingCode = signal('');
   newMappingName = signal('');
   userGeminiKey = signal('');
+  apiKeySource = computed(() => {
+    if (environment.GEMINI_API_KEY && environment.GEMINI_API_KEY !== 'REPLACE_ME_GEMINI_API_KEY') {
+      return 'Baked-in (GitHub Secret)';
+    }
+    const local = localStorage.getItem('user_gemini_key');
+    if (local && local !== 'undefined') return 'Manual Override (LocalStorage)';
+    return 'None (AI Studio Preview only)';
+  });
 
   // Update System States
   showUpdateModal = signal(false);
