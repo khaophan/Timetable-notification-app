@@ -68,14 +68,10 @@ jobs:
 
       - name: Force Update Release
         run: |
-          # ลบ Tag และ Release เก่าออกทุกครั้งเพื่อความสดใหม่
-          gh release delete ota-latest --yes || true
-          git push origin :refs/tags/ota-latest || true
+          # ตรวจสอบว่ามี Release หรือไม่ ถ้าไม่มีให้สร้างใหม่
+          gh release view ota-latest || gh release create ota-latest --title "Live Update" --notes "Auto-generated OTA bundle"
           
-          # สร้าง Release ใหม่พร้อมไฟล์
-          gh release create ota-latest \
-            --title "Live Update: $(date +'%Y-%m-%d %H:%M')" \
-            --notes "Auto-generated OTA bundle for build $GITHUB_SHA" \
-            update.zip version.json
+          # อัปโหลด/เขียนทับไฟล์เดิม (ป้องกันปัญหา 404 จากการลบและสร้างใหม่)
+          gh release upload ota-latest update.zip version.json --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

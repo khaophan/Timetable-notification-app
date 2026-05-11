@@ -193,19 +193,17 @@ export class App implements OnInit {
     
     try {
       const repo = this.githubRepo();
-      const url = `https://api.github.com/repos/${repo}/releases/tags/ota-latest?t=${Date.now()}`;
+      const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
       console.log('Background checking OTA from:', url);
       const response = await fetch(url, { cache: 'no-store' }).catch(() => null);
       
       if (response && response.ok) {
-        const releaseInfo = await response.json();
-        const updateZip = releaseInfo.assets?.find((a: any) => a.name === 'update.zip');
-        const remoteVersion = updateZip ? updateZip.updated_at : releaseInfo.published_at;
+        const remote = await response.json();
         
         const localVersion = localStorage.getItem('app_version');
         
-        if (remoteVersion && remoteVersion !== localVersion) {
-          const shortHash = releaseInfo.target_commitish ? releaseInfo.target_commitish.substring(0, 7) : remoteVersion;
+        if (remote.version && remote.version !== localVersion) {
+          const shortHash = remote.short_hash || remote.version.substring(0, 7);
           this.updateVersion.set(shortHash);
           this.showUpdateModal.set(true);
         }
@@ -230,17 +228,16 @@ export class App implements OnInit {
       try { await CapacitorUpdater.reset(); } catch(e) {}
 
       const repo = this.githubRepo();
-      const versionUrl = `https://api.github.com/repos/${repo}/releases/tags/ota-latest?t=${Date.now()}`;
+      const versionUrl = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
       const versionResult = await fetch(versionUrl, { cache: 'no-store' });
       
       if (!versionResult.ok) {
         throw new Error(`Server responded with ${versionResult.status}: ${versionResult.statusText}`);
       }
       
-      const releaseInfo = await versionResult.json();
-      const updateZip = releaseInfo.assets?.find((a: any) => a.name === 'update.zip');
-      const remoteVersion = updateZip ? updateZip.updated_at : releaseInfo.published_at;
-      const shortHash = releaseInfo.target_commitish ? releaseInfo.target_commitish.substring(0, 7) : remoteVersion;
+      const remote = await versionResult.json();
+      const remoteVersion = remote.version;
+      const shortHash = remote.short_hash || remote.version.substring(0, 7);
 
       // Resolve the actual S3/CDN zip URL bypassing native redirect issues
       let finalZipUrl = `https://github.com/${repo}/releases/download/ota-latest/update.zip`;
@@ -297,15 +294,14 @@ export class App implements OnInit {
     try {
       if (typeof window !== 'undefined' && (window as any).Capacitor) {
         const repo = this.githubRepo();
-        const url = `https://api.github.com/repos/${repo}/releases/tags/ota-latest?t=${Date.now()}`;
+        const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
         
         try {
           const response = await fetch(url, { cache: 'no-store' });
           if (response.ok) {
-            const releaseInfo = await response.json();
-            const updateZip = releaseInfo.assets?.find((a: any) => a.name === 'update.zip');
-            const remoteVersion = updateZip ? updateZip.updated_at : releaseInfo.published_at;
-            const shortHash = releaseInfo.target_commitish ? releaseInfo.target_commitish.substring(0, 7) : remoteVersion;
+            const remote = await response.json();
+            const remoteVersion = remote.version;
+            const shortHash = remote.short_hash || remote.version.substring(0, 7);
             
             const localVersion = localStorage.getItem('app_version');
             
