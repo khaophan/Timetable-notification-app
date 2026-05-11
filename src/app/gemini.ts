@@ -18,7 +18,9 @@ export class GeminiService {
     // 2. Try global variable (AI Studio Preview Environment)
     if (!key) {
       try {
-        key = GEMINI_API_KEY;
+        if (typeof GEMINI_API_KEY !== 'undefined' && GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY') {
+          key = GEMINI_API_KEY;
+        }
       } catch (e) {}
     }
 
@@ -28,7 +30,7 @@ export class GeminiService {
     }
 
     if (!key) {
-      throw new Error('ยังไม่ได้ตั้งค่า API Key สำหรับ AI กรุณาตรวจสอบในหน้าตั้งค่า');
+      throw new Error('ยังไม่ได้ตั้งค่า API Key สำหรับ AI กรุณาตรวจสอบในหน้าตั้งค่า หรือใส่ GEMINI_API_KEY ใน GitHub Secrets');
     }
 
     return new GoogleGenAI({ apiKey: key });
@@ -38,21 +40,25 @@ export class GeminiService {
     try {
       const ai = this.getClient();
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: [
-          {
-            inlineData: {
-              data: base64Image.split(',')[1] || base64Image,
-              mimeType: mimeType,
+        model: 'gemini-3.1-pro-preview',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Image.split(',')[1] || base64Image,
+                mimeType: mimeType,
+              }
+            },
+            {
+              text: 'Extract the class schedule from this image. Guidelines:\n' +
+              '1. Ensure all extracted text (Subject names, Teacher names) is in Thai if it appears in Thai in the image.\n' +
+              '2. If a subject name is missing but a subject code is present, try to infer the subject name or leave it to be the same as the code.\n' +
+              '3. Convert Day of Week to English like "Monday", "Tuesday", etc. (for internal logic).\n' +
+              '4. Ensure startTime and endTime are in "HH:MM" 24h format.\n' +
+              '5. If the schedule is in a grid, carefully map the times to the correct days.'
             }
-          },
-          'Extract the class schedule from this image. Guidelines:\n' +
-          '1. Ensure all extracted text (Subject names, Teacher names) is in Thai if it appears in Thai in the image.\n' +
-          '2. If a subject name is missing but a subject code is present, try to infer the subject name or leave it to be the same as the code.\n' +
-          '3. Convert Day of Week to English like "Monday", "Tuesday", etc. (for internal logic).\n' +
-          '4. Ensure startTime and endTime are in "HH:MM" 24h format.\n' +
-          '5. If the schedule is in a grid, carefully map the times to the correct days.'
-        ],
+          ]
+        },
         config: {
           responseMimeType: 'application/json',
           responseSchema: {

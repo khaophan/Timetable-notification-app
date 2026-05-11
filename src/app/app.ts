@@ -357,9 +357,9 @@ export class App implements OnInit {
           const parsed = await this.gemini.parseScheduleImage(base64, file.type);
           this.store.updateSchedule(parsed);
           this.setTab('home');
-        } catch (err) {
+        } catch (err: any) {
           console.error(err);
-          alert('ไม่สามารถวิเคราะห์ตารางเรียนได้ กรุณาลองใหม่อีกครั้ง');
+          alert(`ไม่สามารถวิเคราะห์ตารางเรียนได้: ${err.message || 'กรุณาลองใหม่อีกครั้ง'}`);
         } finally {
           this.isProcessing.set(false);
         }
