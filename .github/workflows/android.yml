@@ -21,25 +21,32 @@ jobs:
         run: npm install
 
       - name: Build Angular App
-        run: npm run build
+        run: |
+          npm run build
+          ls -R dist/app/browser || echo "Dist folder not found!"
 
-      - name: Build Android Project
+      - name: Capacitor Sync
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
           fi
-          npx cap copy android
           npx cap sync android
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'zulu'
+          cache: 'gradle'
 
-      - name: Build APK
+      - name: Grant execute permission for gradlew
+        run: |
+          chmod +x android/gradlew
+          cd android && ./gradlew --version
+
+      - name: Build APK (Debug)
         working-directory: android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace --no-daemon --console=plain
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
