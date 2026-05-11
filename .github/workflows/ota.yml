@@ -3,10 +3,14 @@ name: Push Live Update (OTA)
 on:
   push:
     branches: [ main, master ]
-    paths-ignore:
-      - 'android/**'
-      - '.github/workflows/android.yml'
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   deploy-ota:
@@ -26,17 +30,37 @@ jobs:
       - name: Build Angular App
         run: npm run build
 
-      - name: Create Update Bundle
+      - name: Validate and Package Update
         run: |
+          # ตรวจสอบว่ามีไฟล์ที่ Build สำเร็จจริง
+          if [ ! -d "dist/app/browser" ]; then
+            echo "Error: Build directory not found!"
+            exit 1
+          fi
+          
+          # สร้าง Version Info
+          echo "{\"version\": \"${{ github.sha }}\", \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\", \"url\": \"https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip\"}" > version.json
+          
+          # บีบอัดไฟล์ (ใช้ -j เพื่อไม่ให้ติดโครงสร้างโฟลเดอร์ลึกเกินไป)
           cd dist/app/browser
           zip -r ../../../update.zip .
           cd ../../../
-          echo "{\"version\": \"${{ github.sha }}\", \"url\": \"https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip\"}" > version.json
+          
+          echo "Bundle created successfully."
+
+      - name: Delete Old Release Tag
+        run: |
+          gh release delete ota-latest --yes || true
+          git push origin :refs/tags/ota-latest || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ota-latest
+          name: "Live Update (Latest Build)"
+          body: "Auto-generated OTA update for version ${{ github.sha }}"
           files: |
             update.zip
             version.json

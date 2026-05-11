@@ -143,9 +143,8 @@ export class App implements OnInit {
         // หรือกำหนดเองถ้าทราบชื่อแน่นอน
         const repo = "khaophan/Timetable-notification-app";
         
-        // ตรวจสอบเวอร์ชันล่าสุดจาก GitHub Releases
-        // หมายเหตุ: ในแอปจริงควรมีหน้า Loading หรือทำใน Background
-        const response = await fetch(`https://raw.githubusercontent.com/${repo}/main/version.json`).catch(() => null);
+        // ตรวจสอบเวอร์ชันล่าสุดจาก GitHub Release Assets
+        const response = await fetch(`https://github.com/${repo}/releases/download/ota-latest/version.json`).catch(() => null);
         if (response && response.ok) {
           const remote = await response.json();
           const localVersion = localStorage.getItem('app_version');
@@ -165,6 +164,41 @@ export class App implements OnInit {
       } catch (e) {
         console.warn('OTA Error:', e);
       }
+    }
+  }
+
+  async checkUpdateManually() {
+    this.isProcessing.set(true);
+    try {
+      if (typeof window !== 'undefined' && (window as any).Capacitor) {
+        const repo = "khaophan/Timetable-notification-app";
+        const response = await fetch(`https://github.com/${repo}/releases/download/ota-latest/version.json`).catch(() => null);
+        
+        if (response && response.ok) {
+          const remote = await response.json();
+          const localVersion = localStorage.getItem('app_version');
+          
+          if (remote.version !== localVersion) {
+            alert('พบเวอร์ชันใหม่! กำลังเริ่มดาวน์โหลด...');
+            const update = await CapacitorUpdater.download({
+              url: `https://github.com/${repo}/releases/download/ota-latest/update.zip`,
+              version: remote.version
+            });
+            await CapacitorUpdater.set(update);
+            localStorage.setItem('app_version', remote.version);
+          } else {
+            alert('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว');
+          }
+        } else {
+          alert('ไม่สามารถตรวจสอบการอัปเดตได้ในขณะนี้');
+        }
+      } else {
+        alert('ฟีเจอร์นี้ใช้งานได้บนแอปพลิเคชันมือถือเท่านั้น');
+      }
+    } catch (e) {
+      alert('เกิดข้อผิดพลาดในการตรวจสอบการอัปเดต');
+    } finally {
+      this.isProcessing.set(false);
     }
   }
 

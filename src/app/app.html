@@ -477,6 +477,17 @@
                 <div class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0 text-xs font-bold">3</div>
                 <p class="text-xs leading-relaxed">ดาวน์โหลด APK ติดตั้งเพียงครั้งเดียว และเริ่มรับการอัปเดตไร้สาย (OTA) ได้เลย</p>
               </div>
+
+              <div class="pt-4 border-t border-white/20">
+                <button 
+                  (click)="checkUpdateManually()"
+                  [disabled]="isProcessing()"
+                  class="w-full bg-white/10 hover:bg-white/20 border border-white/30 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <mat-icon class="!w-4 !h-4 !text-[16px]">refresh</mat-icon>
+                  <span>{{ isProcessing() ? 'กำลังตรวจสอบ...' : 'ตรวจสอบการอัปเดตใหม่' }}</span>
+                </button>
+              </div>
             </div>
 
             <hr class="my-6 border-white/10" />
