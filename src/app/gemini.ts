@@ -1,0 +1,59 @@
+import { Injectable } from '@angular/core';
+import { GoogleGenAI, Type } from '@google/genai';
+import { ClassSession } from './models';
+
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+@Injectable({ providedIn: 'root' })
+export class GeminiService {
+  async parseScheduleImage(base64Image: string, mimeType: string): Promise<ClassSession[]> {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: [
+          {
+            inlineData: {
+              data: base64Image.split(',')[1] || base64Image,
+              mimeType: mimeType,
+            }
+          },
+          'Extract the class schedule from this image. Guidelines:\n' +
+          '1. Ensure all extracted text (Subject names, Teacher names) is in Thai if it appears in Thai in the image.\n' +
+          '2. If a subject name is missing but a subject code is present, try to infer the subject name or leave it to be the same as the code.\n' +
+          '3. Convert Day of Week to English like "Monday", "Tuesday", etc. (for internal logic).\n' +
+          '4. Ensure startTime and endTime are in "HH:MM" 24h format.\n' +
+          '5. If the schedule is in a grid, carefully map the times to the correct days.'
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING, description: 'Generate a unique string ID' },
+                dayOfWeek: { type: Type.STRING, description: 'Day of week in English, e.g., Monday' },
+                startTime: { type: Type.STRING, description: 'Start time in HH:MM format' },
+                endTime: { type: Type.STRING, description: 'End time in HH:MM format' },
+                subjectCode: { type: Type.STRING, description: 'Subject code (e.g., TH31101)' },
+                subjectName: { type: Type.STRING, description: 'Subject name in Thai (e.g., ภาษาไทยพื้นฐาน). If not explicitly written, infer from code if possible.' },
+                room: { type: Type.STRING, description: 'Room number or name' },
+                teacher: { type: Type.STRING, description: 'Teacher name' },
+              },
+              required: ['id', 'dayOfWeek', 'startTime', 'endTime', 'subjectCode', 'subjectName', 'room', 'teacher'],
+            }
+          }
+        }
+      });
+      
+      const text = response.text;
+      if (!text) throw new Error('No text returned from Gemini');
+      
+      const parsed = JSON.parse(text);
+      return parsed;
+    } catch (error) {
+      console.error('Error parsing schedule with Gemini:', error);
+      throw error;
+    }
+  }
+}
