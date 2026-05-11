@@ -30,6 +30,14 @@ export class App implements OnInit {
   newMappingName = signal('');
   userGeminiKey = signal('');
 
+  // Update System States
+  showUpdateModal = signal(false);
+  updateProgress = signal(0);
+  isUpdating = signal(false);
+  updateVersion = signal('');
+  updateStatus = signal<'idle' | 'checking' | 'downloading' | 'error'>('idle');
+  currentAppHash = signal('Unknown');
+
   constructor() {
     if (typeof window !== 'undefined') {
       const savedMappings = localStorage.getItem('subject_mappings');
@@ -42,6 +50,7 @@ export class App implements OnInit {
       }
 
       this.userGeminiKey.set(localStorage.getItem('user_gemini_key') || '');
+      this.currentAppHash.set(localStorage.getItem('app_version')?.substring(0, 7) || 'Unknown');
 
       setInterval(() => {
         this.currentTime.set(new Date());
@@ -139,66 +148,112 @@ export class App implements OnInit {
       try {
         await CapacitorUpdater.notifyAppReady();
         
-        // ค้นหาชื่อ Repo จาก URL ของแอป (กรณีอยู่ใน AI Studio) 
-        // หรือกำหนดเองถ้าทราบชื่อแน่นอน
-        const repo = "khaophan/Timetable-notification-app";
+        // ตรวจสอบเวอร์ชันล่าสุดหลังเปิดแอป 2 วินาที
+        setTimeout(() => this.checkForUpdatesBackground(), 2000);
         
-        // ตรวจสอบเวอร์ชันล่าสุดจาก GitHub Release Assets
-        const response = await fetch(`https://github.com/${repo}/releases/download/ota-latest/version.json`).catch(() => null);
-        if (response && response.ok) {
-          const remote = await response.json();
-          const localVersion = localStorage.getItem('app_version');
-          
-          if (remote.version !== localVersion) {
-            console.log('New version found! Downloading...');
-            const update = await CapacitorUpdater.download({
-              url: `https://github.com/${repo}/releases/download/ota-latest/update.zip`,
-              version: remote.version
-            });
-            
-            await CapacitorUpdater.set(update);
-            localStorage.setItem('app_version', remote.version);
-            // แอปจะรีโหลดอัตโนมัติ
+        // ตรวจสอบซ้ำทุก 30 นาที
+        setInterval(() => this.checkForUpdatesBackground(), 30 * 60 * 1000);
+
+        // ฟังการดาวน์โหลดเพื่อดึงเปอร์เซ็นต์จริง
+        CapacitorUpdater.addListener('download', (info: any) => {
+          if (info.percent) {
+            this.updateProgress.set(Math.round(info.percent));
           }
-        }
+        });
       } catch (e) {
-        console.warn('OTA Error:', e);
+        console.warn('OTA Init Error:', e);
       }
     }
   }
 
+  async checkForUpdatesBackground() {
+    if (this.isUpdating()) return;
+    this.updateStatus.set('checking');
+    
+    try {
+      const repo = "khaophan/Timetable-notification-app";
+      const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
+      const response = await fetch(url).catch(() => null);
+      
+      if (response && response.ok) {
+        const remote = await response.json();
+        const localVersion = localStorage.getItem('app_version');
+        
+        if (remote.version !== localVersion) {
+          this.updateVersion.set(remote.short_hash || remote.version.substring(0, 7));
+          this.showUpdateModal.set(true);
+        }
+        this.updateStatus.set('idle');
+      } else {
+        this.updateStatus.set('error');
+      }
+    } catch (e) {
+      this.updateStatus.set('error');
+    }
+  }
+
+  async startLiveUpdate() {
+    if (this.isUpdating()) return;
+    
+    this.isUpdating.set(true);
+    this.updateStatus.set('downloading');
+    this.updateProgress.set(0);
+    
+    try {
+      const repo = "khaophan/Timetable-notification-app";
+      const versionUrl = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
+      const versionResult = await fetch(versionUrl);
+      const remote = await versionResult.json();
+
+      const update = await CapacitorUpdater.download({
+        url: `https://github.com/${repo}/releases/download/ota-latest/update.zip`,
+        version: remote.version
+      });
+
+      localStorage.setItem('app_version', remote.version);
+      this.currentAppHash.set(remote.short_hash || remote.version.substring(0, 7));
+      
+      await CapacitorUpdater.set(update);
+    } catch (e) {
+      alert('การอัปเดตล้มเหลว กรุณาลองใหม่อีกครั้ง');
+      this.isUpdating.set(false);
+      this.showUpdateModal.set(false);
+      this.updateStatus.set('error');
+    }
+  }
+
   async checkUpdateManually() {
-    this.isProcessing.set(true);
+    if (this.updateStatus() === 'checking' || this.isUpdating()) return;
+    this.updateStatus.set('checking');
+    
     try {
       if (typeof window !== 'undefined' && (window as any).Capacitor) {
         const repo = "khaophan/Timetable-notification-app";
-        const response = await fetch(`https://github.com/${repo}/releases/download/ota-latest/version.json`).catch(() => null);
+        const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
+        const response = await fetch(url).catch(() => null);
         
         if (response && response.ok) {
           const remote = await response.json();
           const localVersion = localStorage.getItem('app_version');
           
           if (remote.version !== localVersion) {
-            alert('พบเวอร์ชันใหม่! กำลังเริ่มดาวน์โหลด...');
-            const update = await CapacitorUpdater.download({
-              url: `https://github.com/${repo}/releases/download/ota-latest/update.zip`,
-              version: remote.version
-            });
-            await CapacitorUpdater.set(update);
-            localStorage.setItem('app_version', remote.version);
+            this.updateVersion.set(remote.short_hash || remote.version.substring(0, 7));
+            this.showUpdateModal.set(true);
           } else {
-            alert('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว');
+            alert('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว (' + (remote.short_hash || 'Latest') + ')');
           }
+          this.updateStatus.set('idle');
         } else {
-          alert('ไม่สามารถตรวจสอบการอัปเดตได้ในขณะนี้');
+          alert('ไม่สามารถดึงข้อมูลอัปเดตจาก GitHub ได้ (Release อาจยังไม่ถูกสร้าง)');
+          this.updateStatus.set('error');
         }
       } else {
         alert('ฟีเจอร์นี้ใช้งานได้บนแอปพลิเคชันมือถือเท่านั้น');
+        this.updateStatus.set('idle');
       }
     } catch (e) {
       alert('เกิดข้อผิดพลาดในการตรวจสอบการอัปเดต');
-    } finally {
-      this.isProcessing.set(false);
+      this.updateStatus.set('error');
     }
   }
 

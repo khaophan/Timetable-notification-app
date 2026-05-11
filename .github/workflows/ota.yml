@@ -32,39 +32,36 @@ jobs:
 
       - name: Validate and Package Update
         run: |
-          # ตรวจสอบว่ามีไฟล์ที่ Build สำเร็จจริง
-          if [ ! -d "dist/app/browser" ]; then
-            echo "Error: Build directory not found!"
-            exit 1
+          # ค้นหา Browser folder โดยไม่ยึดติดกับโครงสร้าง
+          BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
+          if [ -z "$BROWSER_DIR" ]; then
+            BROWSER_DIR="dist/app" # Fallback
           fi
           
-          # สร้าง Version Info
-          echo "{\"version\": \"${{ github.sha }}\", \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\", \"url\": \"https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip\"}" > version.json
+          echo "Using source directory: $BROWSER_DIR"
           
-          # บีบอัดไฟล์ (ใช้ -j เพื่อไม่ให้ติดโครงสร้างโฟลเดอร์ลึกเกินไป)
-          cd dist/app/browser
+          # สร้าง Version Info
+          VERSION_HASH="${{ github.sha }}"
+          SHORT_HASH="${VERSION_HASH:0:7}"
+          echo "{\"version\": \"$VERSION_HASH\", \"short_hash\": \"$SHORT_HASH\", \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\", \"url\": \"https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip\"}" > version.json
+          
+          # บีบอัดไฟล์
+          cd "$BROWSER_DIR"
           zip -r ../../../update.zip .
           cd ../../../
           
-          echo "Bundle created successfully."
+          echo "Update package created: update.zip"
 
-      - name: Delete Old Release Tag
+      - name: Force Update Release
         run: |
+          # ลบ Tag และ Release เก่าออกทุกครั้งเพื่อความสดใหม่
           gh release delete ota-latest --yes || true
           git push origin :refs/tags/ota-latest || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ota-latest
-          name: "Live Update (Latest Build)"
-          body: "Auto-generated OTA update for version ${{ github.sha }}"
-          files: |
-            update.zip
-            version.json
-          prerelease: false
-          make_latest: true
+          
+          # สร้าง Release ใหม่พร้อมไฟล์
+          gh release create ota-latest \
+            --title "Live Update: $(date +'%Y-%m-%d %H:%M')" \
+            --notes "Auto-generated OTA bundle for build $GITHUB_SHA" \
+            update.zip version.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
