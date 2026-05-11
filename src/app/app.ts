@@ -193,16 +193,20 @@ export class App implements OnInit {
     
     try {
       const repo = this.githubRepo();
-      const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
+      const url = `https://api.github.com/repos/${repo}/releases/tags/ota-latest?t=${Date.now()}`;
       console.log('Background checking OTA from:', url);
       const response = await fetch(url, { cache: 'no-store' }).catch(() => null);
       
       if (response && response.ok) {
-        const remote = await response.json();
+        const releaseInfo = await response.json();
+        const updateZip = releaseInfo.assets?.find((a: any) => a.name === 'update.zip');
+        const remoteVersion = updateZip ? updateZip.updated_at : releaseInfo.published_at;
+        
         const localVersion = localStorage.getItem('app_version');
         
-        if (remote.version !== localVersion) {
-          this.updateVersion.set(remote.short_hash || remote.version.substring(0, 7));
+        if (remoteVersion && remoteVersion !== localVersion) {
+          const shortHash = releaseInfo.target_commitish ? releaseInfo.target_commitish.substring(0, 7) : remoteVersion;
+          this.updateVersion.set(shortHash);
           this.showUpdateModal.set(true);
         }
         this.updateStatus.set('idle');
@@ -226,14 +230,17 @@ export class App implements OnInit {
       try { await CapacitorUpdater.reset(); } catch(e) {}
 
       const repo = this.githubRepo();
-      const versionUrl = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
+      const versionUrl = `https://api.github.com/repos/${repo}/releases/tags/ota-latest?t=${Date.now()}`;
       const versionResult = await fetch(versionUrl, { cache: 'no-store' });
       
       if (!versionResult.ok) {
         throw new Error(`Server responded with ${versionResult.status}: ${versionResult.statusText}`);
       }
       
-      const remote = await versionResult.json();
+      const releaseInfo = await versionResult.json();
+      const updateZip = releaseInfo.assets?.find((a: any) => a.name === 'update.zip');
+      const remoteVersion = updateZip ? updateZip.updated_at : releaseInfo.published_at;
+      const shortHash = releaseInfo.target_commitish ? releaseInfo.target_commitish.substring(0, 7) : remoteVersion;
 
       // Resolve the actual S3/CDN zip URL bypassing native redirect issues
       let finalZipUrl = `https://github.com/${repo}/releases/download/ota-latest/update.zip`;
@@ -254,7 +261,7 @@ export class App implements OnInit {
       try {
          update = await CapacitorUpdater.download({
            url: finalZipUrl,
-           version: remote.version
+           version: remoteVersion
          });
       } catch (downloadErr: any) {
          // Fallback retry
@@ -262,19 +269,21 @@ export class App implements OnInit {
          await new Promise(r => setTimeout(r, 1000));
          update = await CapacitorUpdater.download({
            url: finalZipUrl,
-           version: remote.version
+           version: remoteVersion
          });
       }
 
-      localStorage.setItem('app_version', remote.version);
-      this.currentAppHash.set(remote.short_hash || remote.version.substring(0, 7));
+      localStorage.setItem('app_version', remoteVersion);
+      this.currentAppHash.set(shortHash);
       
       // Delay slightly for UI to show 100%
       await new Promise(r => setTimeout(r, 500));
       
       await CapacitorUpdater.set(update);
     } catch (e: any) {
-      alert(`การอัปเดตล้มเหลว: ${e.message || 'Unknown Error'}\n\nกรุณาตรวจสอบอินเทอร์เน็ตและชื่อ Repository`);
+      const errMsg = e?.message || String(e);
+      const errStack = e?.stack || 'No Stack';
+      alert(`การอัปเดตล้มเหลว\n\n[ข้อมูลทางเทคนิค]\nError: ${errMsg}\nStack: ${errStack}\n\nกรุณาจับภาพหน้าจอนี้ส่งให้ AI ตรวจสอบ`);
       this.isUpdating.set(false);
       this.showUpdateModal.set(false);
       this.updateStatus.set('error');
@@ -288,26 +297,39 @@ export class App implements OnInit {
     try {
       if (typeof window !== 'undefined' && (window as any).Capacitor) {
         const repo = this.githubRepo();
-        const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
+        const url = `https://api.github.com/repos/${repo}/releases/tags/ota-latest?t=${Date.now()}`;
         
         try {
           const response = await fetch(url, { cache: 'no-store' });
           if (response.ok) {
-            const remote = await response.json();
+            const releaseInfo = await response.json();
+            const updateZip = releaseInfo.assets?.find((a: any) => a.name === 'update.zip');
+            const remoteVersion = updateZip ? updateZip.updated_at : releaseInfo.published_at;
+            const shortHash = releaseInfo.target_commitish ? releaseInfo.target_commitish.substring(0, 7) : remoteVersion;
+            
             const localVersion = localStorage.getItem('app_version');
             
-            if (remote.version !== localVersion) {
-              this.updateVersion.set(remote.short_hash || remote.version.substring(0, 7));
+            if (remoteVersion && remoteVersion !== localVersion) {
+              this.updateVersion.set(shortHash);
               this.showUpdateModal.set(true);
             } else {
-              alert('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว (' + (remote.short_hash || 'Latest') + ')');
+              alert('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว (' + shortHash + ')');
             }
             this.updateStatus.set('idle');
+          } else if (response.status === 404) {
+            // กรณียังไม่มีการ Release มองว่าเป็นเวอร์ชันล่าสุดเลย
+            alert('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว\n(ยังไม่พบประวัติการอัปเดตบน GitHub)');
+            this.updateStatus.set('idle');
           } else {
-            throw new Error(`HTTP ${response.status}`);
+            let bodyText = '';
+            try { bodyText = await response.text(); } catch(err){}
+            throw new Error(`HTTP Error ${response.status} - ${response.statusText}\nResponseBody: ${bodyText.substring(0, 500)}`);
           }
         } catch (e: any) {
-          alert(`ไม่สามารถเชื่อมต่อ GitHub ได้ (${e.message})\n\nคำแนะนำ:\n1. ชื่อ Repo ต้องถูกต้อง (username/repo)\n2. สาเหตุส่วนใหญ่คือ GitHub ยังไม่สร้าง Release ให้เสร็จสิ้น (รอ 1-2 นาทีหลัง Push)`);
+          const errMsg = e?.message || String(e);
+          const errStack = e?.stack || 'No Stack';
+          const detailedMessage = `ไม่สามารถตรวจสอบข้อมูลอัปเดตได้\n\n[ข้อมูลทางเทคนิคสำหรับการแก้ปัญหา]\nURL: ${url}\nError Message: ${errMsg}\nError Type: ${e?.name || 'Unknown'}\n\nStack:\n${errStack}\n\nคำแนะนำ:\n1. จับภาพหน้าจอนี้ส่งให้ AI ช่วยวิเคราะห์\n2. ตรวจสอบว่าชื่อ Repository ถูกต้องและตั้งเป็น Public\n3. อินเทอร์เน็ตอาจถูกบล็อกการเข้าถึง GitHub API`;
+          alert(detailedMessage);
           this.updateStatus.set('error');
         }
       } else {
