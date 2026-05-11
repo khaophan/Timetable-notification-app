@@ -20,20 +20,29 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Inject API Key
+        run: |
+          sed -i "s/REPLACE_ME_GEMINI_API_KEY/${{ secrets.GEMINI_API_KEY }}/g" src/environments/environment.ts
+        if: env.HAS_SECRET == 'true'
+        env:
+          HAS_SECRET: ${{ secrets.GEMINI_API_KEY != '' }}
+
       - name: Build Angular App
         run: |
           npm run build
-          # ค้นหา Browser folder และสร้าง symlink เป็น www เพื่อความรัดกุม
+          # คืนค่า BROWSER_DIR อย่างแม่นยำ
           BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
           if [ -z "$BROWSER_DIR" ]; then BROWSER_DIR="dist/app"; fi
-          ln -s "$BROWSER_DIR" www
-          echo "Normalized build output to ./www"
+          
+          # ใช้การ copy แทน symlink เพื่อความรัดกุมในการทำงานของ Capacitor
+          rm -rf www
+          mkdir www
+          cp -r "$BROWSER_DIR"/. www/
+          echo "Sync output to ./www completed"
 
       - name: Capacitor Sync
         run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
+          npx cap add android || echo "Android already added or failed to add"
           npx cap sync android
 
       - name: Set up JDK 21
