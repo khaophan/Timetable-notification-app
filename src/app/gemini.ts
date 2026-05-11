@@ -2,12 +2,33 @@ import { Injectable } from '@angular/core';
 import { GoogleGenAI, Type } from '@google/genai';
 import { ClassSession } from './models';
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+declare const GEMINI_API_KEY: string | undefined;
 
 @Injectable({ providedIn: 'root' })
 export class GeminiService {
+  private getClient() {
+    let key: string | undefined;
+    
+    // 1. Try global variable (AI Studio Environment)
+    try {
+      key = GEMINI_API_KEY;
+    } catch (e) {}
+
+    // 2. Try localStorage (User provided in APK)
+    if (!key || key === 'undefined') {
+      key = localStorage.getItem('user_gemini_key') || undefined;
+    }
+
+    if (!key) {
+      throw new Error('ยังไม่ได้ตั้งค่า API Key สำหรับ AI กรุณาตรวจสอบในหน้าตั้งค่า');
+    }
+
+    return new GoogleGenAI({ apiKey: key });
+  }
+
   async parseScheduleImage(base64Image: string, mimeType: string): Promise<ClassSession[]> {
     try {
+      const ai = this.getClient();
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
         contents: [

@@ -101,16 +101,25 @@ export class NotificationService {
   private sendNotification(title: string, session: ClassSession, settings: AppSettings, isEnd = false) {
     const thaiTitle = isEnd ? 'หมดคาบเรียน' : 'คาบเรียนถัดไป';
     let body = '';
+
+    // Get mappings to resolve names
+    let mappings: Record<string, string> = {};
+    try {
+      const saved = localStorage.getItem('subject_mappings');
+      if (saved) mappings = JSON.parse(saved);
+    } catch(e) {}
+
+    const resolvedName = session.subjectName || mappings[session.subjectCode?.toUpperCase() || ''] || session.subjectCode;
     
     if (isEnd) {
-      body = `หมดคาบเรียนวิชา ${session.subjectName || session.subjectCode || 'ไม่ระบุ'} แล้ว`;
+      body = `หมดคาบเรียนวิชา ${resolvedName || 'ไม่ระบุ'} แล้ว`;
     } else {
       const parts = [];
-      const showName = settings.notifySubjectName && session.subjectName;
-      const showCode = settings.notifySubjectCode && session.subjectCode && session.subjectCode !== session.subjectName;
+      const showName = settings.notifySubjectName && resolvedName;
+      const showCode = settings.notifySubjectCode && session.subjectCode && session.subjectCode !== resolvedName;
       
       let nameStr = '';
-      if (showName) nameStr += session.subjectName;
+      if (showName) nameStr += resolvedName;
       if (showCode) nameStr += (showName ? ` (${session.subjectCode})` : session.subjectCode);
       
       if (nameStr) parts.push(nameStr);

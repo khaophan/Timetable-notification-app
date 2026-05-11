@@ -23,13 +23,63 @@ export class App implements OnInit {
   activeTab = signal<'home' | 'schedule' | 'settings'>('home');
   isProcessing = signal(false);
   currentTime = signal<Date>(new Date());
+  
+  // Subject Mapping
+  subjectMappings = signal<Record<string, string>>({});
+  newMappingCode = signal('');
+  newMappingName = signal('');
+  userGeminiKey = signal('');
 
   constructor() {
     if (typeof window !== 'undefined') {
+      const savedMappings = localStorage.getItem('subject_mappings');
+      if (savedMappings) {
+        try {
+          this.subjectMappings.set(JSON.parse(savedMappings));
+        } catch (e) {
+          console.error('Failed to load mappings', e);
+        }
+      }
+
+      this.userGeminiKey.set(localStorage.getItem('user_gemini_key') || '');
+
       setInterval(() => {
         this.currentTime.set(new Date());
       }, 1000);
     }
+  }
+
+  saveMapping() {
+    const code = this.newMappingCode().trim().toUpperCase();
+    const name = this.newMappingName().trim();
+    if (!code || !name) return;
+
+    const current = this.subjectMappings();
+    const updated = { ...current, [code]: name };
+    this.subjectMappings.set(updated);
+    localStorage.setItem('subject_mappings', JSON.stringify(updated));
+    
+    this.newMappingCode.set('');
+    this.newMappingName.set('');
+  }
+
+  saveGeminiKey() {
+    const key = this.userGeminiKey().trim();
+    localStorage.setItem('user_gemini_key', key);
+    alert('บันทึก API Key เรียบร้อยแล้ว ระบบ AI พร้อมทำงาน');
+  }
+
+  removeMapping(code: string) {
+    const current = this.subjectMappings();
+    const { [code]: _, ...updated } = current;
+    this.subjectMappings.set(updated);
+    localStorage.setItem('subject_mappings', JSON.stringify(updated));
+  }
+
+  resolveSubjectName(session: ClassSession): string {
+    const code = (session.subjectCode || '').toUpperCase();
+    const mapping = this.subjectMappings();
+    return session.subjectName || mapping[code] || code || 'ไม่ระบุวิชา';
   }
 
   getClassStatus(session: ClassSession): 'past' | 'current' | 'future' {
