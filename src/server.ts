@@ -6,10 +6,15 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import {join} from 'node:path';
+import cors from 'cors';
+import { GoogleGenAI, Type } from '@google/genai';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+
 const angularApp = new AngularNodeAppEngine({
   allowedHosts: [
     'localhost',
@@ -18,17 +23,76 @@ const angularApp = new AngularNodeAppEngine({
   ]
 });
 
-/**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
- */
+app.post('/api/gemini/parse', async (req, res) => {
+  try {
+    const { base64Image, mimeType } = req.body;
+    if (!base64Image || !mimeType) {
+      res.status(400).json({ error: 'Missing base64Image or mimeType' });
+      return;
+    }
+
+    const key = process.env['GEMINI_API_KEY'];
+    if (!key) {
+      res.status(500).json({ error: 'GEMINI_API_KEY is not defined on the server' });
+      return;
+    }
+
+    const ai = new GoogleGenAI({ apiKey: key });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Image.split(',')[1] || base64Image,
+              mimeType: mimeType,
+            }
+          },
+          {
+            text: 'Extract the class schedule from this image. Guidelines:\n' +
+            '1. Ensure all extracted text (Subject names, Teacher names) is in Thai if it appears in Thai in the image.\n' +
+            '2. If a subject name is missing but a subject code is present, try to infer the subject name or leave it to be the same as the code.\n' +
+            '3. Convert Day of Week to English like "Monday", "Tuesday", etc. (for internal logic).\n' +
+            '4. Ensure startTime and endTime are in "HH:MM" 24h format.\n' +
+            '5. If the schedule is in a grid, carefully map the times to the correct days.'
+          }
+        ]
+      },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING, description: 'Generate a unique string ID' },
+              dayOfWeek: { type: Type.STRING, description: 'Day of week in English, e.g., Monday' },
+              startTime: { type: Type.STRING, description: 'Start time in HH:MM format' },
+              endTime: { type: Type.STRING, description: 'End time in HH:MM format' },
+              subjectCode: { type: Type.STRING, description: 'Subject code (e.g., TH31101)' },
+              subjectName: { type: Type.STRING, description: 'Subject name in Thai (e.g., ภาษาไทยพื้นฐาน). If not explicitly written, infer from code if possible.' },
+              room: { type: Type.STRING, description: 'Room number or name' },
+              teacher: { type: Type.STRING, description: 'Teacher name' },
+            },
+            required: ['id', 'dayOfWeek', 'startTime', 'endTime', 'subjectCode', 'subjectName', 'room', 'teacher'],
+          }
+        }
+      }
+    });
+    
+    const text = response.text;
+    if (!text) {
+      res.status(500).json({ error: 'No text returned from Gemini' });
+      return;
+    }
+    
+    const parsed = JSON.parse(text);
+    res.json(parsed);
+  } catch (error: any) {
+    console.error('Error parsing schedule with Gemini:', error);
+    res.status(500).json({ error: error.message || String(error) });
+  }
+});
 
 /**
  * Serve static files from /browser

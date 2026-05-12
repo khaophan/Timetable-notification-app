@@ -7,7 +7,7 @@ import { GeminiService } from './gemini';
 import { NotificationService } from './notification';
 import { ClassSession } from './models';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
-import { CapacitorHttp } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { environment } from '../environments/environment';
 
 @Component({
@@ -166,7 +166,7 @@ export class App implements OnInit {
     this.notification.startChecking();
     
     // OTA Update Check
-    if (typeof window !== 'undefined' && (window as any).Capacitor) {
+    if (Capacitor.isNativePlatform()) {
       try {
         await CapacitorUpdater.notifyAppReady();
         
@@ -305,7 +305,7 @@ export class App implements OnInit {
     this.updateStatus.set('checking');
     
     try {
-      if (typeof window !== 'undefined' && (window as any).Capacitor) {
+      if (Capacitor.isNativePlatform()) {
         const repo = this.githubRepo();
         const url = `https://github.com/${repo}/releases/download/ota-latest/version.json?t=${Date.now()}`;
         

@@ -10,7 +10,11 @@ const config: CapacitorConfig = {
       '*.github.com',
       '*.githubusercontent.com',
       '*.google.com',
-      '*.googleapis.com'
+      '*.googleapis.com',
+      'generativelanguage.googleapis.com',
+      'firebaseapp.com',
+      '*.firebaseapp.com',
+      'fcm.googleapis.com'
     ]
   },
   plugins: {
@@ -20,6 +24,14 @@ const config: CapacitorConfig = {
     CapacitorUpdater: {
       autoUpdate: false,
       statsUrl: ''
+    },
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert']
+    },
+    LocalNotifications: {
+      smallIcon: 'ic_stat_icon_config_sample',
+      iconColor: '#488AFF',
+      sound: 'beep.wav'
     }
   }
 };
