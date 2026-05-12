@@ -8,6 +8,7 @@ import { NotificationService } from './notification';
 import { ClassSession } from './models';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
 import { environment } from '../environments/environment';
 
 @Component({
@@ -36,8 +37,8 @@ export class App implements OnInit {
     if (environment.GEMINI_API_KEY && environment.GEMINI_API_KEY !== 'REPLACE_ME_GEMINI_API_KEY') {
       return 'Baked-in (GitHub Secret)';
     }
-    const local = typeof window !== 'undefined' ? localStorage.getItem('user_gemini_key') : null;
-    if (local && local !== 'undefined') return 'Manual Override (LocalStorage)';
+    const local = this.userGeminiKey();
+    if (local && local !== 'undefined') return 'Manual Override (Preferences)';
     return 'None (AI Studio Preview only)';
   });
 
@@ -51,26 +52,31 @@ export class App implements OnInit {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      const savedMappings = localStorage.getItem('subject_mappings');
-      if (savedMappings) {
-        try {
-          this.subjectMappings.set(JSON.parse(savedMappings));
-        } catch (e) {
-          console.error('Failed to load mappings', e);
-        }
-      }
-
-      this.userGeminiKey.set(localStorage.getItem('user_gemini_key') || '');
-      this.currentAppHash.set(localStorage.getItem('app_version')?.substring(0, 7) || 'Unknown');
-      this.githubRepo.set(localStorage.getItem('github_repo') || 'khaophan/Timetable-notification-app');
-
       setInterval(() => {
         this.currentTime.set(new Date());
       }, 1000);
     }
   }
 
-  saveMapping() {
+  private async getPref(key: string, fallback: string = ''): Promise<string> {
+    if (Capacitor.isNativePlatform()) {
+      const { value } = await Preferences.get({ key });
+      return value || fallback;
+    } else if (typeof window !== 'undefined') {
+      return localStorage.getItem(key) || fallback;
+    }
+    return fallback;
+  }
+
+  private async setPref(key: string, value: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.set({ key, value });
+    } else if (typeof window !== 'undefined') {
+      localStorage.setItem(key, value);
+    }
+  }
+
+  async saveMapping() {
     const code = this.newMappingCode().trim().toUpperCase();
     const name = this.newMappingName().trim();
     if (!code || !name) return;
@@ -78,33 +84,33 @@ export class App implements OnInit {
     const current = this.subjectMappings();
     const updated = { ...current, [code]: name };
     this.subjectMappings.set(updated);
-    localStorage.setItem('subject_mappings', JSON.stringify(updated));
+    await this.setPref('subject_mappings', JSON.stringify(updated));
     
     this.newMappingCode.set('');
     this.newMappingName.set('');
   }
 
-  saveGeminiKey() {
+  async saveGeminiKey() {
     const key = this.userGeminiKey().trim();
-    localStorage.setItem('user_gemini_key', key);
+    await this.setPref('user_gemini_key', key);
     alert('บันทึก API Key เรียบร้อยแล้ว ระบบ AI พร้อมทำงาน');
   }
 
-  saveGithubRepo() {
+  async saveGithubRepo() {
     const repo = this.githubRepo().trim();
     if (!repo.includes('/')) {
       alert('รูปแบบชื่อ Repository ไม่ถูกต้อง (ต้องเป็น username/repo-name)');
       return;
     }
-    localStorage.setItem('github_repo', repo);
+    await this.setPref('github_repo', repo);
     alert('บันทึกชื่อ Repository เรียบร้อยแล้ว');
   }
 
-  removeMapping(code: string) {
+  async removeMapping(code: string) {
     const current = this.subjectMappings();
     const { [code]: _, ...updated } = current;
     this.subjectMappings.set(updated);
-    localStorage.setItem('subject_mappings', JSON.stringify(updated));
+    await this.setPref('subject_mappings', JSON.stringify(updated));
   }
 
   resolveSubjectName(session: ClassSession): string {
@@ -165,6 +171,25 @@ export class App implements OnInit {
   async ngOnInit() {
     this.notification.startChecking();
     
+    // Load preferences async
+    const [savedMappings, geminiKey, repo, appVersion] = await Promise.all([
+      this.getPref('subject_mappings'),
+      this.getPref('user_gemini_key'),
+      this.getPref('github_repo', 'khaophan/Timetable-notification-app'),
+      this.getPref('app_version', 'Unknown')
+    ]);
+
+    if (savedMappings) {
+      try {
+        this.subjectMappings.set(JSON.parse(savedMappings));
+      } catch (e) {
+        console.error('Failed to load mappings', e);
+      }
+    }
+    this.userGeminiKey.set(geminiKey);
+    this.githubRepo.set(repo);
+    this.currentAppHash.set(appVersion.substring(0, 7));
+
     // OTA Update Check
     if (Capacitor.isNativePlatform()) {
       try {
@@ -207,7 +232,7 @@ export class App implements OnInit {
           try { remote = JSON.parse(remote); } catch(e) {}
         }
         
-        const localVersion = localStorage.getItem('app_version');
+        const localVersion = await this.getPref('app_version');
         
         if (remote.version && remote.version !== localVersion) {
           const shortHash = remote.short_hash || remote.version.substring(0, 7);
@@ -283,7 +308,7 @@ export class App implements OnInit {
          });
       }
 
-      localStorage.setItem('app_version', remoteVersion);
+      await this.setPref('app_version', remoteVersion);
       this.currentAppHash.set(shortHash);
       
       // Delay slightly for UI to show 100%
@@ -322,7 +347,7 @@ export class App implements OnInit {
             const remoteVersion = remote.version;
             const shortHash = remote.short_hash || remote.version.substring(0, 7);
             
-            const localVersion = localStorage.getItem('app_version');
+            const localVersion = await this.getPref('app_version');
             
             if (remoteVersion && remoteVersion !== localVersion) {
               this.updateVersion.set(shortHash);

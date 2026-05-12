@@ -1,5 +1,7 @@
 import { Injectable, signal, effect } from '@angular/core';
 import { ClassSession, AppSettings, ActiveNotification } from './models';
+import { Preferences } from '@capacitor/preferences';
+import { Capacitor } from '@capacitor/core';
 
 @Injectable({ providedIn: 'root' })
 export class AppStore {
@@ -20,28 +22,48 @@ export class AppStore {
     
     // Save state on change
     effect(() => {
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('sched_schedule', JSON.stringify(this.schedule()));
-          localStorage.setItem('sched_settings', JSON.stringify(this.settings()));
-          localStorage.setItem('sched_active', JSON.stringify(this.isActive()));
+      const currentSchedule = this.schedule();
+      const currentSettings = this.settings();
+      const currentActive = this.isActive();
+      
+      const saveAsync = async () => {
+        try {
+          if (Capacitor.isNativePlatform()) {
+            await Preferences.set({ key: 'sched_schedule', value: JSON.stringify(currentSchedule) });
+            await Preferences.set({ key: 'sched_settings', value: JSON.stringify(currentSettings) });
+            await Preferences.set({ key: 'sched_active', value: JSON.stringify(currentActive) });
+          } else if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('sched_schedule', JSON.stringify(currentSchedule));
+            localStorage.setItem('sched_settings', JSON.stringify(currentSettings));
+            localStorage.setItem('sched_active', JSON.stringify(currentActive));
+          }
+        } catch (e) {
+          console.warn('Failed to save state:', e);
         }
-      } catch (e) {
-        console.warn('Failed to save state to localStorage:', e);
-      }
+      };
+      
+      saveAsync();
     });
   }
 
-  private loadState() {
-    if (typeof localStorage === 'undefined') return;
+  private async loadState() {
     try {
-      const storedSchedule = localStorage.getItem('sched_schedule');
+      let storedSchedule: string | null = null;
+      let storedSettings: string | null = null;
+      let storedActive: string | null = null;
+
+      if (Capacitor.isNativePlatform()) {
+        storedSchedule = (await Preferences.get({ key: 'sched_schedule' })).value;
+        storedSettings = (await Preferences.get({ key: 'sched_settings' })).value;
+        storedActive = (await Preferences.get({ key: 'sched_active' })).value;
+      } else if (typeof localStorage !== 'undefined') {
+        storedSchedule = localStorage.getItem('sched_schedule');
+        storedSettings = localStorage.getItem('sched_settings');
+        storedActive = localStorage.getItem('sched_active');
+      }
+
       if (storedSchedule) this.schedule.set(JSON.parse(storedSchedule));
-
-      const storedSettings = localStorage.getItem('sched_settings');
       if (storedSettings) this.settings.set(JSON.parse(storedSettings));
-
-      const storedActive = localStorage.getItem('sched_active');
       if (storedActive !== null) this.isActive.set(JSON.parse(storedActive));
     } catch (e) {
       console.error('Failed to load state', e);
