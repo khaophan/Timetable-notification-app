@@ -37,7 +37,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       # ════════════════════════════════════════════════════════
       # SECTION 2 : AUTO-PATCH FILES (แก้ไข 4 ไฟล์อัตโนมัติ)
