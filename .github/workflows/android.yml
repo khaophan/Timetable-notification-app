@@ -249,8 +249,6 @@ jobs:
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "⏩ Skipping APK signing because KEYSTORE_BASE64 is empty"
-            echo "APK_PATH=android/app/build/outputs/apk/release/app-release-unsigned.apk" >> $GITHUB_ENV
-            echo "APK_NAME=app-release-unsigned.apk" >> $GITHUB_ENV
             exit 0
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
