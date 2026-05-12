@@ -133,15 +133,30 @@ jobs:
             echo "⏩ Skipping APK signing because KEYSTORE_BASE64 is empty"
             exit 0
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          
+          # Clean up any potential carriage returns in secrets
+          KEYSTORE_PASSWORD=$(echo -n "$KEYSTORE_PASSWORD" | tr -d '\r')
+          KEY_ALIAS=$(echo -n "$KEY_ALIAS" | tr -d '\r')
+          KEY_PASSWORD=$(echo -n "$KEY_PASSWORD" | tr -d '\r')
+
+          echo "Decoding keystore..."
+          echo "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > keystore.jks
+          
+          # Fallback to the alias you created if the secret is missing
+          if [ -z "$KEY_ALIAS" ]; then
+            KEY_ALIAS="MyScheduleApp"
+          fi
+          
           BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner sign \
-            --ks keystore.jks \
-            --ks-pass pass:$KEYSTORE_PASSWORD \
-            --ks-key-alias $KEY_ALIAS \
-            --key-pass pass:$KEY_PASSWORD \
-            --out app-release-signed.apk \
-            android/app/build/outputs/apk/release/app-release-unsigned.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          
+          echo "Signing APK..."
+          if [ -n "$KEY_PASSWORD" ]; then
+            "$APKSIGNER" sign --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEY_PASSWORD" --out app-release-signed.apk android/app/build/outputs/apk/release/app-release-unsigned.apk
+          else
+            "$APKSIGNER" sign --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" --out app-release-signed.apk android/app/build/outputs/apk/release/app-release-unsigned.apk
+          fi
+          
           rm -f keystore.jks
           echo "APK_PATH=app-release-signed.apk" >> $GITHUB_ENV
           echo "APK_NAME=app-release-signed.apk" >> $GITHUB_ENV
