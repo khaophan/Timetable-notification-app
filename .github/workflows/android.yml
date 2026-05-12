@@ -212,11 +212,24 @@ jobs:
       - name: Grant Gradlew Permission
         run: chmod +x android/gradlew
 
+      - name: Build APK (Determine Type)
+        id: build_type_check
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          HAS_KEYSTORE="${{ secrets.KEYSTORE_BASE64 != '' }}"
+          
+          if [ "$BUILD_TYPE" = "release" ] && [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "⚠️ ไม่พบ KEYSTORE_BASE64 ใน GitHub Secrets"
+            echo "เปลี่ยนไปสร้างแบบ Debug อัตโนมัติเพื่อให้สามารถติดตั้งเพื่อทดสอบได้"
+            BUILD_TYPE="debug"
+          fi
+          
+          echo "BUILD_TYPE=$BUILD_TYPE" >> $GITHUB_ENV
+
       - name: Build APK
         working-directory: android
         run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
-          if [ "$BUILD_TYPE" = "release" ]; then
+          if [ "${{ env.BUILD_TYPE }}" = "release" ]; then
             ./gradlew assembleRelease --stacktrace --no-daemon --console=plain
             echo "APK_PATH=android/app/build/outputs/apk/release/app-release-unsigned.apk" >> $GITHUB_ENV
             echo "APK_NAME=app-release-unsigned.apk" >> $GITHUB_ENV
