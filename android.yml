@@ -1,0 +1,373 @@
+name: Build Android APK (Release)
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/ota.yml'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ════════════════════════════════════════════════════════
+      # SECTION 1 : SETUP
+      # ════════════════════════════════════════════════════════
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 2 : AUTO-PATCH FILES (แก้ไข 4 ไฟล์อัตโนมัติ)
+      # ════════════════════════════════════════════════════════
+
+      # ── [PATCH 1/4] environment.ts ────────────────────────────
+      - name: "🔧 PATCH 1/4 - environment.ts"
+        run: |
+          TARGET="src/environments/environment.ts"
+          mkdir -p src/environments
+
+          # เขียนทับเสมอเพื่อให้ placeholder ถูกต้อง
+          cat > "$TARGET" << 'EOF'
+          export const environment = {
+            production: false,
+            GEMINI_API_KEY: 'REPLACE_ME_GEMINI_API_KEY'
+          };
+          EOF
+          echo "✅ environment.ts patched"
+          cat "$TARGET"
+
+      # ── [PATCH 2/4] environment.prod.ts ──────────────────────
+      - name: "🔧 PATCH 2/4 - environment.prod.ts"
+        run: |
+          TARGET="src/environments/environment.prod.ts"
+          mkdir -p src/environments
+
+          # สร้าง/เขียนทับเสมอ
+          cat > "$TARGET" << 'EOF'
+          export const environment = {
+            production: true,
+            GEMINI_API_KEY: 'REPLACE_ME_GEMINI_API_KEY'
+          };
+          EOF
+          echo "✅ environment.prod.ts patched"
+          cat "$TARGET"
+
+      # ── [PATCH 3/4] inject-env.js ─────────────────────────────
+      - name: "🔧 PATCH 3/4 - inject-env.js"
+        run: |
+          cat > inject-env.js << 'EOF'
+          #!/usr/bin/env node
+          const fs = require('fs');
+          const path = require('path');
+
+          const PLACEHOLDER = 'REPLACE_ME_GEMINI_API_KEY';
+          const TARGET_FILES = [
+            'src/environments/environment.ts',
+            'src/environments/environment.prod.ts',
+          ];
+
+          const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+
+          if (!GEMINI_API_KEY) {
+            console.error('❌ ERROR: GEMINI_API_KEY is not set in GitHub Secrets!');
+            process.exit(1);
+          }
+
+          let successCount = 0;
+          for (const relPath of TARGET_FILES) {
+            const filePath = path.resolve(process.cwd(), relPath);
+            if (!fs.existsSync(filePath)) {
+              console.warn(`⚠️  Not found, skipping: ${relPath}`);
+              continue;
+            }
+            const original = fs.readFileSync(filePath, 'utf8');
+            if (!original.includes(PLACEHOLDER)) {
+              console.warn(`⚠️  Placeholder not found in: ${relPath}`);
+              continue;
+            }
+            const injected = original.replaceAll(PLACEHOLDER, GEMINI_API_KEY);
+            fs.writeFileSync(filePath, injected, 'utf8');
+            console.log(`✅ Injected into: ${relPath}`);
+            successCount++;
+          }
+
+          if (successCount === 0) {
+            console.error('❌ ERROR: No files were injected!');
+            process.exit(1);
+          }
+          console.log(`\n🔑 Done: ${successCount}/${TARGET_FILES.length} files updated`);
+          console.log(`🔐 Key preview: ${GEMINI_API_KEY.substring(0, 8)}...`);
+          EOF
+          echo "✅ inject-env.js patched"
+
+      # ── [PATCH 4/4] capacitor.config.ts ──────────────────────
+      - name: "🔧 PATCH 4/4 - capacitor.config.ts"
+        run: |
+          # ดึง REPO URL จาก GitHub context
+          REPO="${{ github.repository }}"
+          OTA_VERSION_URL="https://github.com/${REPO}/releases/download/ota-latest/version.json"
+
+          cat > capacitor.config.ts << EOF
+          import { CapacitorConfig } from '@capacitor/cli';
+
+          const config: CapacitorConfig = {
+            appId: 'com.schedule.notifier.thai',
+            appName: 'แจ้งเตือนตารางเรียน',
+            webDir: 'www',
+            server: {
+              allowNavigation: [
+                'github.com',
+                '*.github.com',
+                '*.githubusercontent.com',
+                '*.google.com',
+                '*.googleapis.com',
+                'generativelanguage.googleapis.com',
+                'firebaseapp.com',
+                '*.firebaseapp.com',
+                'fcm.googleapis.com'
+              ]
+            },
+            plugins: {
+              CapacitorUpdater: {
+                autoUpdate: true,
+                statsUrl: '',
+                updateUrl: '${OTA_VERSION_URL}'
+              },
+              PushNotifications: {
+                presentationOptions: ['badge', 'sound', 'alert']
+              },
+              LocalNotifications: {
+                smallIcon: 'ic_stat_icon_config_sample',
+                iconColor: '#488AFF',
+                sound: 'beep.wav'
+              }
+            }
+          };
+
+          export default config;
+          EOF
+          echo "✅ capacitor.config.ts patched"
+          echo "🔗 OTA URL: $OTA_VERSION_URL"
+
+      # ── ยืนยันว่า Patch ครบทุกไฟล์ ───────────────────────────
+      - name: "✅ Verify All Patches Applied"
+        run: |
+          echo "═══════════════════════════════════"
+          echo " Patch Verification Report"
+          echo "═══════════════════════════════════"
+
+          FILES=(
+            "src/environments/environment.ts"
+            "src/environments/environment.prod.ts"
+            "inject-env.js"
+            "capacitor.config.ts"
+          )
+          ALL_OK=true
+          for f in "${FILES[@]}"; do
+            if [ -f "$f" ]; then
+              echo "✅ $f"
+            else
+              echo "❌ MISSING: $f"
+              ALL_OK=false
+            fi
+          done
+
+          # ตรวจสอบ placeholder ใน environment files
+          for f in src/environments/environment.ts src/environments/environment.prod.ts; do
+            if grep -q "REPLACE_ME_GEMINI_API_KEY" "$f"; then
+              echo "✅ Placeholder OK: $f"
+            else
+              echo "❌ Placeholder MISSING: $f"
+              ALL_OK=false
+            fi
+          done
+
+          # ตรวจสอบ OTA URL ใน capacitor config
+          if grep -q "ota-latest" capacitor.config.ts; then
+            echo "✅ OTA URL OK: capacitor.config.ts"
+          else
+            echo "❌ OTA URL MISSING: capacitor.config.ts"
+            ALL_OK=false
+          fi
+
+          if [ "$ALL_OK" = false ]; then
+            echo ""
+            echo "❌ Patch verification FAILED!"
+            exit 1
+          fi
+          echo ""
+          echo "🎉 All 4 files patched successfully!"
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 3 : INJECT & BUILD
+      # ════════════════════════════════════════════════════════
+
+      - name: Inject API Keys
+        run: node inject-env.js
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Verify API Key Injected
+        run: |
+          for f in src/environments/environment.ts src/environments/environment.prod.ts; do
+            if grep -q "REPLACE_ME_GEMINI_API_KEY" "$f"; then
+              echo "❌ ERROR: $f - placeholder ยังอยู่! ตรวจสอบ GEMINI_API_KEY ใน Secrets"
+              exit 1
+            fi
+            echo "✅ $f - API key injected"
+          done
+
+      - name: Build Angular App (Production)
+        run: npm run build -- --configuration=production
+
+      - name: Prepare www/ for Capacitor
+        run: |
+          BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
+          if [ -z "$BROWSER_DIR" ]; then
+            BROWSER_DIR=$(find dist -type d -maxdepth 3 | grep -v "^dist$" | head -n 1)
+          fi
+          echo "📁 Build output: $BROWSER_DIR"
+          rm -rf www && mkdir -p www
+          cp -r "$BROWSER_DIR"/. www/
+          echo "✅ www/ ready"
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 4 : CAPACITOR + ANDROID
+      # ════════════════════════════════════════════════════════
+
+      - name: Capacitor Sync Android
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Patch AndroidManifest (PiP + Permissions)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          if ! grep -q "supportsPictureInPicture" "$MANIFEST"; then
+            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:supportsPictureInPicture="true"\n            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"/' "$MANIFEST"
+            echo "✅ PiP enabled"
+          fi
+
+          if ! grep -q "POST_NOTIFICATIONS" "$MANIFEST"; then
+            sed -i 's|<\/manifest>|    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"\/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"\/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"\/>\n<\/manifest>|' "$MANIFEST"
+            echo "✅ Permissions added"
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'zulu'
+          cache: 'gradle'
+
+      - name: Grant Gradlew Permission
+        run: chmod +x android/gradlew
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          if [ "$BUILD_TYPE" = "release" ]; then
+            ./gradlew assembleRelease --stacktrace --no-daemon --console=plain
+            echo "APK_PATH=android/app/build/outputs/apk/release/app-release-unsigned.apk" >> $GITHUB_ENV
+            echo "APK_NAME=app-release-unsigned.apk" >> $GITHUB_ENV
+          else
+            ./gradlew assembleDebug --stacktrace --no-daemon --console=plain
+            echo "APK_PATH=android/app/build/outputs/apk/debug/app-debug.apk" >> $GITHUB_ENV
+            echo "APK_NAME=app-debug.apk" >> $GITHUB_ENV
+          fi
+
+      - name: Sign APK (Release)
+        if: ${{ (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == '') && secrets.KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+          BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner sign \
+            --ks keystore.jks \
+            --ks-pass pass:${{ secrets.KEYSTORE_PASSWORD }} \
+            --ks-key-alias ${{ secrets.KEY_ALIAS }} \
+            --key-pass pass:${{ secrets.KEY_PASSWORD }} \
+            --out app-release-signed.apk \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+          rm -f keystore.jks
+          echo "APK_PATH=app-release-signed.apk" >> $GITHUB_ENV
+          echo "APK_NAME=app-release-signed.apk" >> $GITHUB_ENV
+          echo "✅ APK signed"
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 5 : PUBLISH
+      # ════════════════════════════════════════════════════════
+
+      - name: Generate version.json
+        run: |
+          TIMESTAMP=$(date +%s)
+          SHORT_HASH="${GITHUB_SHA::7}"
+          cat > version.json << EOF
+          {
+            "version": "$TIMESTAMP",
+            "short_hash": "$SHORT_HASH",
+            "appId": "com.schedule.notifier.thai",
+            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "apk_url": "https://github.com/${{ github.repository }}/releases/download/apk-latest/${{ env.APK_NAME }}",
+            "ota_url": "https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip"
+          }
+          EOF
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ github.run_number }}
+          path: ${{ env.APK_PATH }}
+          retention-days: 30
+
+      - name: Publish APK to GitHub Release
+        run: |
+          gh release view apk-latest \
+            || gh release create apk-latest \
+              --title "📱 Android APK (Latest)" \
+              --notes "Build #${{ github.run_number }}"
+          gh release upload apk-latest \
+            "${{ env.APK_PATH }}#${{ env.APK_NAME }}" \
+            version.json --clobber
+          echo "✅ APK published!"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Job Summary
+        run: |
+          echo "## 📱 APK Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build # | ${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${GITHUB_SHA::7}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| APK | \`${{ env.APK_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auto-Patched Files | environment.ts, environment.prod.ts, inject-env.js, capacitor.config.ts |" >> $GITHUB_STEP_SUMMARY
+          echo "| Download | [apk-latest](https://github.com/${{ github.repository }}/releases/tag/apk-latest) |" >> $GITHUB_STEP_SUMMARY

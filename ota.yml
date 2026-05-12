@@ -1,0 +1,334 @@
+name: Push OTA Live Update
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'angular.json'
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: 'ข้อความแจ้งการอัปเดต'
+        required: false
+        default: 'Bug fixes and improvements'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-ota:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ════════════════════════════════════════════════════════
+      # SECTION 1 : SETUP
+      # ════════════════════════════════════════════════════════
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 2 : AUTO-PATCH FILES (แก้ไข 4 ไฟล์อัตโนมัติ)
+      # ════════════════════════════════════════════════════════
+
+      # ── [PATCH 1/4] environment.ts ────────────────────────────
+      - name: "🔧 PATCH 1/4 - environment.ts"
+        run: |
+          TARGET="src/environments/environment.ts"
+          mkdir -p src/environments
+
+          cat > "$TARGET" << 'EOF'
+          export const environment = {
+            production: false,
+            GEMINI_API_KEY: 'REPLACE_ME_GEMINI_API_KEY'
+          };
+          EOF
+          echo "✅ environment.ts patched"
+
+      # ── [PATCH 2/4] environment.prod.ts ──────────────────────
+      - name: "🔧 PATCH 2/4 - environment.prod.ts"
+        run: |
+          TARGET="src/environments/environment.prod.ts"
+          mkdir -p src/environments
+
+          cat > "$TARGET" << 'EOF'
+          export const environment = {
+            production: true,
+            GEMINI_API_KEY: 'REPLACE_ME_GEMINI_API_KEY'
+          };
+          EOF
+          echo "✅ environment.prod.ts patched"
+
+      # ── [PATCH 3/4] inject-env.js ─────────────────────────────
+      - name: "🔧 PATCH 3/4 - inject-env.js"
+        run: |
+          cat > inject-env.js << 'EOF'
+          #!/usr/bin/env node
+          const fs = require('fs');
+          const path = require('path');
+
+          const PLACEHOLDER = 'REPLACE_ME_GEMINI_API_KEY';
+          const TARGET_FILES = [
+            'src/environments/environment.ts',
+            'src/environments/environment.prod.ts',
+          ];
+
+          const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+
+          if (!GEMINI_API_KEY) {
+            console.error('❌ ERROR: GEMINI_API_KEY is not set in GitHub Secrets!');
+            process.exit(1);
+          }
+
+          let successCount = 0;
+          for (const relPath of TARGET_FILES) {
+            const filePath = path.resolve(process.cwd(), relPath);
+            if (!fs.existsSync(filePath)) {
+              console.warn(`⚠️  Not found, skipping: ${relPath}`);
+              continue;
+            }
+            const original = fs.readFileSync(filePath, 'utf8');
+            if (!original.includes(PLACEHOLDER)) {
+              console.warn(`⚠️  Placeholder not found in: ${relPath}`);
+              continue;
+            }
+            const injected = original.replaceAll(PLACEHOLDER, GEMINI_API_KEY);
+            fs.writeFileSync(filePath, injected, 'utf8');
+            console.log(`✅ Injected into: ${relPath}`);
+            successCount++;
+          }
+
+          if (successCount === 0) {
+            console.error('❌ ERROR: No files were injected!');
+            process.exit(1);
+          }
+          console.log(`\n🔑 Done: ${successCount}/${TARGET_FILES.length} files updated`);
+          console.log(`🔐 Key preview: ${GEMINI_API_KEY.substring(0, 8)}...`);
+          EOF
+          echo "✅ inject-env.js patched"
+
+      # ── [PATCH 4/4] capacitor.config.ts ──────────────────────
+      - name: "🔧 PATCH 4/4 - capacitor.config.ts"
+        run: |
+          REPO="${{ github.repository }}"
+          OTA_VERSION_URL="https://github.com/${REPO}/releases/download/ota-latest/version.json"
+
+          cat > capacitor.config.ts << EOF
+          import { CapacitorConfig } from '@capacitor/cli';
+
+          const config: CapacitorConfig = {
+            appId: 'com.schedule.notifier.thai',
+            appName: 'แจ้งเตือนตารางเรียน',
+            webDir: 'www',
+            server: {
+              allowNavigation: [
+                'github.com',
+                '*.github.com',
+                '*.githubusercontent.com',
+                '*.google.com',
+                '*.googleapis.com',
+                'generativelanguage.googleapis.com',
+                'firebaseapp.com',
+                '*.firebaseapp.com',
+                'fcm.googleapis.com'
+              ]
+            },
+            plugins: {
+              CapacitorUpdater: {
+                autoUpdate: true,
+                statsUrl: '',
+                updateUrl: '${OTA_VERSION_URL}'
+              },
+              PushNotifications: {
+                presentationOptions: ['badge', 'sound', 'alert']
+              },
+              LocalNotifications: {
+                smallIcon: 'ic_stat_icon_config_sample',
+                iconColor: '#488AFF',
+                sound: 'beep.wav'
+              }
+            }
+          };
+
+          export default config;
+          EOF
+          echo "✅ capacitor.config.ts patched"
+          echo "🔗 OTA URL: $OTA_VERSION_URL"
+
+      # ── ยืนยันว่า Patch ครบทุกไฟล์ ───────────────────────────
+      - name: "✅ Verify All Patches Applied"
+        run: |
+          echo "═══════════════════════════════════"
+          echo " Patch Verification Report"
+          echo "═══════════════════════════════════"
+
+          ALL_OK=true
+          FILES=(
+            "src/environments/environment.ts"
+            "src/environments/environment.prod.ts"
+            "inject-env.js"
+            "capacitor.config.ts"
+          )
+          for f in "${FILES[@]}"; do
+            if [ -f "$f" ]; then
+              echo "✅ EXISTS  : $f"
+            else
+              echo "❌ MISSING : $f"
+              ALL_OK=false
+            fi
+          done
+
+          for f in src/environments/environment.ts src/environments/environment.prod.ts; do
+            if grep -q "REPLACE_ME_GEMINI_API_KEY" "$f"; then
+              echo "✅ PLACEHOLDER OK : $f"
+            else
+              echo "❌ PLACEHOLDER MISSING : $f"
+              ALL_OK=false
+            fi
+          done
+
+          if grep -q "autoUpdate: true" capacitor.config.ts && grep -q "ota-latest" capacitor.config.ts; then
+            echo "✅ OTA CONFIG OK : capacitor.config.ts"
+          else
+            echo "❌ OTA CONFIG INVALID : capacitor.config.ts"
+            ALL_OK=false
+          fi
+
+          if [ "$ALL_OK" = false ]; then
+            echo ""; echo "❌ Verification FAILED!"; exit 1
+          fi
+          echo ""; echo "🎉 All 4 files patched and verified!"
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 3 : INJECT & BUILD
+      # ════════════════════════════════════════════════════════
+
+      - name: Inject API Keys
+        run: node inject-env.js
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Verify API Key Injected
+        run: |
+          for f in src/environments/environment.ts src/environments/environment.prod.ts; do
+            if grep -q "REPLACE_ME_GEMINI_API_KEY" "$f"; then
+              echo "❌ $f - placeholder ยังอยู่! ตรวจสอบ GEMINI_API_KEY ใน Secrets"
+              exit 1
+            fi
+            echo "✅ $f - API key injected"
+          done
+
+      - name: Build Angular App (Production)
+        run: npm run build -- --configuration=production
+
+      # ════════════════════════════════════════════════════════
+      # SECTION 4 : PACKAGE & PUBLISH OTA
+      # ════════════════════════════════════════════════════════
+
+      - name: Locate Build Output
+        run: |
+          BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
+          if [ -z "$BROWSER_DIR" ]; then
+            BROWSER_DIR=$(find dist -type d -maxdepth 3 | grep -v "^dist$" | head -n 1)
+          fi
+          if [ -z "$BROWSER_DIR" ] || [ ! -d "$BROWSER_DIR" ]; then
+            echo "❌ Cannot find build output!"; ls -la dist/; exit 1
+          fi
+          echo "📁 Build output: $BROWSER_DIR"
+          echo "BROWSER_DIR=$BROWSER_DIR" >> $GITHUB_ENV
+
+      - name: Generate version.json
+        run: |
+          TIMESTAMP=$(date +%s)
+          SHORT_HASH="${GITHUB_SHA::7}"
+          CHANGELOG="${{ github.event.inputs.changelog || 'Bug fixes and improvements' }}"
+          cat > version.json << EOF
+          {
+            "version": "$TIMESTAMP",
+            "short_hash": "$SHORT_HASH",
+            "appId": "com.schedule.notifier.thai",
+            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "url": "https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip",
+            "changelog": "$CHANGELOG",
+            "mandatory": false
+          }
+          EOF
+          echo "VERSION_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          echo "SHORT_HASH=$SHORT_HASH" >> $GITHUB_ENV
+          cat version.json
+
+      - name: Create Update Bundle (update.zip)
+        run: |
+          cd "${{ env.BROWSER_DIR }}"
+          zip -r ../../../update.zip . -q
+          cd ../../../
+          UPDATE_SIZE=$(du -sh update.zip | cut -f1)
+          echo "📦 update.zip: $UPDATE_SIZE"
+          echo "UPDATE_SIZE=$UPDATE_SIZE" >> $GITHUB_ENV
+          unzip -t update.zip > /dev/null && echo "✅ ZIP valid" || exit 1
+
+      - name: Publish OTA to GitHub Release
+        run: |
+          gh release view ota-latest \
+            || gh release create ota-latest \
+              --title "🔄 OTA Update (Latest)" \
+              --notes "Auto-generated OTA release"
+          gh release upload ota-latest update.zip version.json --clobber
+          echo "✅ OTA published!"
+          echo "🔗 https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── ส่ง FCM Notification ──────────────────────────────────
+      - name: Notify Users via Firebase FCM
+        if: ${{ secrets.FIREBASE_SERVER_KEY != '' }}
+        run: |
+          CHANGELOG="${{ github.event.inputs.changelog || 'มีอัปเดตใหม่พร้อมใช้งาน' }}"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: key=${{ secrets.FIREBASE_SERVER_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"to\": \"/topics/ota-updates\",
+              \"notification\": {
+                \"title\": \"🔄 แจ้งเตือนตารางเรียน - อัปเดตใหม่\",
+                \"body\": \"$CHANGELOG\",
+                \"sound\": \"default\"
+              },
+              \"data\": {
+                \"type\": \"ota_update\",
+                \"version\": \"${{ env.VERSION_TIMESTAMP }}\",
+                \"url\": \"https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip\",
+                \"changelog\": \"$CHANGELOG\"
+              },
+              \"android\": { \"priority\": \"high\" }
+            }" \
+            https://fcm.googleapis.com/fcm/send)
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ FCM notification sent (HTTP $HTTP_STATUS)"
+          else
+            echo "⚠️  FCM HTTP $HTTP_STATUS - ตรวจสอบ FIREBASE_SERVER_KEY ใน Secrets"
+          fi
+
+      - name: Job Summary
+        run: |
+          echo "## 🔄 OTA Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ env.VERSION_TIMESTAMP }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ env.SHORT_HASH }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Size | ${{ env.UPDATE_SIZE }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auto-Patched Files | environment.ts, environment.prod.ts, inject-env.js, capacitor.config.ts |" >> $GITHUB_STEP_SUMMARY
+          echo "| OTA URL | [update.zip](https://github.com/${{ github.repository }}/releases/download/ota-latest/update.zip) |" >> $GITHUB_STEP_SUMMARY
