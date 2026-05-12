@@ -40,7 +40,7 @@ export class GeminiService {
     try {
       const ai = this.getClient();
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-2.0-flash',
         contents: {
           parts: [
             {
@@ -86,9 +86,15 @@ export class GeminiService {
       
       const parsed = JSON.parse(text);
       return parsed;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error parsing schedule with Gemini:', error);
-      throw error;
+      
+      const errMsg = error?.message || String(error);
+      if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error('ขออภัย ระบบมีการใช้งาน AI เกินโควต้าฟรีที่กำหนดชั่วคราว กรุณารอสักครู่ (ประมาณ 1 นาที) แล้วลองใหม่อีกครั้ง');
+      } else {
+        throw new Error(`เกิดข้อผิดพลาดจาก AI: ${errMsg}`);
+      }
     }
   }
 }
