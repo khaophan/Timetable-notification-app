@@ -19,15 +19,12 @@ jobs:
       - name: Push to Destination Repository
         env:
           DESTINATION_TOKEN: ${{ secrets.DESTINATION_TOKEN }}
-          DESTINATION_USERNAME: ${{ secrets.DESTINATION_USERNAME }}
-          DESTINATION_REPO: ${{ secrets.DESTINATION_REPO }}
+          DESTINATION_USERNAME: "promeasurementhub"
+          DESTINATION_REPO: "Timetable-notification-app"
         run: |
           if [ -z "$DESTINATION_TOKEN" ]; then
-            echo "Error: DESTINATION_TOKEN is not set in Secrets."
-            exit 1
-          fi
-          if [ -z "$DESTINATION_USERNAME" ] || [ -z "$DESTINATION_REPO" ]; then
-            echo "Error: DESTINATION_USERNAME or DESTINATION_REPO is not set in Secrets."
+            echo "Error: DESTINATION_TOKEN is not set in GitHub Secrets."
+            echo "Please go to Settings > Secrets and variables > Actions and add 'DESTINATION_TOKEN'."
             exit 1
           fi
           
@@ -38,8 +35,7 @@ jobs:
           echo "Syncing to https://github.com/$DESTINATION_USERNAME/$DESTINATION_REPO"
           echo "Note: If you get 'Repository not found', please make sure:"
           echo "1. The destination repository ($DESTINATION_REPO) is already created in the target account."
-          echo "2. DESTINATION_USERNAME is your GitHub Username, NOT your email address."
-          echo "3. DESTINATION_TOKEN (Personal Access Token) has 'repo' permissions."
+          echo "2. DESTINATION_TOKEN (Personal Access Token) has 'repo' permissions."
           
           DEST_REPO_URL="https://${DESTINATION_USERNAME}:${DESTINATION_TOKEN}@github.com/${DESTINATION_USERNAME}/${DESTINATION_REPO}.git"
           
