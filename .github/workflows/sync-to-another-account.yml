@@ -18,7 +18,6 @@ jobs:
           
       - name: Push to Destination Repository
         env:
-          # ตัวแปรนี้จะดึงค่าจาก GitHub Secrets ที่ตั้งค่าไว้
           DESTINATION_TOKEN: ${{ secrets.DESTINATION_TOKEN }}
           DESTINATION_USERNAME: ${{ secrets.DESTINATION_USERNAME }}
           DESTINATION_REPO: ${{ secrets.DESTINATION_REPO }}
@@ -32,9 +31,16 @@ jobs:
             exit 1
           fi
           
-          echo "Syncing to https://github.com/$DESTINATION_USERNAME/$DESTINATION_REPO"
+          # ตั้งค่า Email ตามที่ระบุ
+          git config --global user.email "khaophan.po@gmail.com"
+          git config --global user.name "GitHub Sync Action"
           
-          # ผูก URL ของ Repository ปลายทางเข้าไป
+          echo "Syncing to https://github.com/$DESTINATION_USERNAME/$DESTINATION_REPO"
+          echo "Note: If you get 'Repository not found', please make sure:"
+          echo "1. The destination repository ($DESTINATION_REPO) is already created in the target account."
+          echo "2. DESTINATION_USERNAME is your GitHub Username, NOT your email address."
+          echo "3. DESTINATION_TOKEN (Personal Access Token) has 'repo' permissions."
+          
           DEST_REPO_URL="https://${DESTINATION_USERNAME}:${DESTINATION_TOKEN}@github.com/${DESTINATION_USERNAME}/${DESTINATION_REPO}.git"
           
           git remote add destination "$DEST_REPO_URL"
