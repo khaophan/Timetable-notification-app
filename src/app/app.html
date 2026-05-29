@@ -732,6 +732,25 @@
               </div>
               }
 
+              @if (isInAppBrowser()) {
+              <div class="p-4 bg-rose-50 border border-rose-200/40 rounded-2xl text-rose-800 flex items-start gap-3 animate-pulse">
+                <mat-icon class="text-rose-600 shrink-0 select-none">error_outline</mat-icon>
+                <div class="text-[11px] leading-relaxed font-bold">
+                  <span class="text-rose-900 font-extrabold text-[12px] block mb-1">⚠️ ระบบตรวจพบเปิดในแอปอื่น (เช่น LINE/Facebook/Messenger)</span>
+                  เบราว์เซอร์ภายในแอปโซเชียลจะบล็อกการติดตั้งแอปหลักเสมอ แนะนำให้ <span class="underline text-rose-900">กดปุ่มเมนู 3 จุด หรือปุุ่มแชร์ที่มุมจอ</span> แล้วเลือกคำสั่ง <span class="bg-rose-100 px-1 py-0.5 rounded text-rose-950 font-black">"เปิดใน Chrome" (หรือ Open in Safari บนไอโฟน)</span> เพื่อติดตั้งตารางเรียนไว้ใช้งานได้ทันที 100% ครับ!
+                </div>
+              </div>
+              }
+
+              @if (isStandalone()) {
+              <div class="p-4 bg-emerald-50 border border-emerald-200/40 rounded-2xl text-emerald-800 flex items-start gap-3">
+                <mat-icon class="text-emerald-600 shrink-0 select-none">verified_user</mat-icon>
+                <div class="text-[11px] leading-relaxed font-bold">
+                  คุณกำลังเปิดใช้งานบน <span class="text-emerald-950 font-black">"แอปพลิเคชันตารางเรียนโดยตรง" (โหมด Standalone)</span> ได้รับสิทธิประโยชน์และความปลอดภัยครบถ้วน มั่นใจได้ ไม่จำเป็นต้องติดตั้งซ้ำแล้วครับ 🎉
+                </div>
+              </div>
+              }
+
               @if (deferredPrompt()) {
               <div class="p-4 bg-indigo-50 border border-indigo-100 rounded-3xl">
                 <p class="text-[11px] text-indigo-800/90 leading-relaxed">
@@ -771,6 +790,34 @@
                 </div>
               </div>
               }
+
+              <!-- Advanced PWA Diagnoser Box -->
+              <div class="mt-4 p-4 bg-slate-50 border border-slate-150 rounded-2xl">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span>
+                    วิเคราะห์สถานะระบบตารางเรียน PWA
+                  </span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-extrabold">
+                    {{ swStatus() === 'registered' ? 'บริการพื้นหลังพร้อมติดตั้ง' : swStatus() === 'checking' ? 'กำลังตรวจสอบ...' : 'ไม่รองรับ PWA' }}
+                  </span>
+                </div>
+                <div class="space-y-1.5 text-[10px] text-slate-500 leading-relaxed font-semibold">
+                  <div class="flex items-center justify-between">
+                    <div>สถานะสคริปต์ Service Worker:</div>
+                    <div class="font-bold" [class.text-emerald-600]="swStatus() === 'registered'" [class.text-amber-600]="swStatus() === 'checking'">
+                      {{ swStatus() === 'registered' ? 'ทำงานปกติ (Active)' : swStatus() === 'checking' ? 'กำลังทำคำขอ...' : 'ไม่ได้เปิดบริการ' }}
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div>โหมดเว็บแอปพลิเคชัน (PWA-manifest):</div>
+                    <div class="text-emerald-600 font-bold">พร้อมดาวน์โหลด (MIME Verified)</div>
+                  </div>
+                  <p class="mt-2 text-[10px] text-slate-400 font-semibold border-t border-dashed border-slate-200 pt-2 leading-relaxed">
+                    💡 **ทำไมตรวจไม่พบปุ่มติดตั้ง?** เป็นเพราะระบบ Chrome จะซ่อนปุ่มอัตโนมัติหากคุณได้ "ดาวน์โหลดแอปนี้ลงเมนูไปแล้ว" หรืออยู่ในแท็บไม่ระบุตัวตน (Incognito) หากต้องการรับการแจ้งเตือนเพิ่มเติม ก็สามารถเข้าผ่านตัวแอปที่ดาวน์โหลดไปชั่วคราวได้เลยครับ!
+                  </p>
+                </div>
+              </div>
 
               <!-- OTA Updates Checker Section -->
               <div class="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

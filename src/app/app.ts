@@ -43,6 +43,9 @@ export class App implements OnInit {
   updateAvailable = signal(false);
   isCheckingUpdate = signal(false);
   isInIframe = signal(typeof window !== 'undefined' && window.self !== window.top);
+  isInAppBrowser = signal(false);
+  isStandalone = signal(typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true));
+  swStatus = signal<'checking' | 'registered' | 'failed' | 'not_supported'>('checking');
 
   editForm = new FormGroup({
     id: new FormControl('', { nonNullable: true }),
@@ -69,6 +72,31 @@ export class App implements OnInit {
       setInterval(() => {
         this.currentTime.set(new Date());
       }, 1000);
+
+      // In-App browser detection (Line, FB, Messenger, IG, Webview)
+      const ua = window.navigator.userAgent.toLowerCase();
+      const isApp = ua.includes('line/') || ua.includes('fbav') || ua.includes('messenger') || ua.includes('fbios') || ua.includes('instagram') || ua.includes('webview') || ua.includes('wv');
+      this.isInAppBrowser.set(isApp);
+
+      // Service worker registration check
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then((reg) => {
+          if (reg) {
+            this.swStatus.set('registered');
+          } else {
+            this.swStatus.set('checking');
+            navigator.serviceWorker.ready.then(() => {
+              this.swStatus.set('registered');
+            }).catch(() => {
+              this.swStatus.set('failed');
+            });
+          }
+        }).catch(() => {
+          this.swStatus.set('failed');
+        });
+      } else {
+        this.swStatus.set('not_supported');
+      }
 
       const windowWithPwa = window as unknown as { deferredPrompt: PwaInstallPrompt | null | undefined };
 
