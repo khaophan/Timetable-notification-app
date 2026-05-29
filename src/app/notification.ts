@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, effect } from '@angular/core';
 import { AppStore } from './store';
 import { ClassSession, AppSettings } from './models';
 import { Capacitor } from '@capacitor/core';
@@ -13,6 +13,16 @@ export class NotificationService {
   constructor() {
     if (typeof window !== 'undefined') {
       this.requestPermission();
+      
+      // Auto-schedule native alarms in OS whenever schedule or settings change
+      effect(() => {
+        // Trigger on any change of these signals
+        this.store.schedule();
+        this.store.settings();
+        this.store.isActive();
+        
+        this.scheduleAllNativeNotifications();
+      });
     }
   }
 
@@ -96,20 +106,21 @@ export class NotificationService {
     for (let i = 0; i < todayClasses.length; i++) {
       const session = todayClasses[i];
 
-      // Check start time (3 mins before)
+      // Check start time (preNotifyMinutes before)
+      const preNotifyMinutes = settings.preNotifyMinutes !== undefined ? settings.preNotifyMinutes : 3;
       const startParts = session.startTime.split(':');
       if (startParts.length === 2) {
         const startH = parseInt(startParts[0], 10);
         const startM = parseInt(startParts[1], 10);
         
         let notifyH = startH;
-        let notifyM = startM - 3;
-        if (notifyM < 0) {
+        let notifyM = startM - preNotifyMinutes;
+        while (notifyM < 0) {
           notifyM += 60;
           notifyH -= 1;
-          if (notifyH < 0) {
-            notifyH += 24;
-          }
+        }
+        if (notifyH < 0) {
+          notifyH = (notifyH % 24 + 24) % 24;
         }
 
         if (currentHours === notifyH && currentMinutes === notifyM) {
@@ -156,14 +167,22 @@ export class NotificationService {
 
   private sendClassTransitionNotification(time: string, prev: ClassSession | null, next: ClassSession, classNum: number, settings: AppSettings) {
     const nextName = this.resolveName(next);
+    const preNotifyMinutes = settings.preNotifyMinutes !== undefined ? settings.preNotifyMinutes : 3;
     
     const prefix = classNum === 1 ? 'คาบแรก' : `คาบที่ ${classNum}`;
     
-    let body = `อีก 3 นาทีจะเริ่มเรียน (${prefix})\nวิชา: ${nextName}\nเวลาเข้าเรียน: ${next.startTime} น.`;
+    let body = preNotifyMinutes > 0
+      ? `อีก ${preNotifyMinutes} นาทีจะเริ่มเรียน (${prefix})\nวิชา: ${nextName}\nเวลาเข้าเรียน: ${next.startTime} น.`
+      : `ได้เวลาเริ่มเรียน (${prefix})\nวิชา: ${nextName}\nเวลาเข้าเรียน: ${next.startTime} น.`;
+      
     if (next.room) body += `\nเรียนห้อง: ${next.room}`;
     if (next.teacher) body += `\nคุณครู: ${next.teacher}`;
 
-    this.sendNotification('แจ้งเตือนเข้าเรียน (ล่วงหน้า 3 นาที)', body, 'start', settings);
+    const title = preNotifyMinutes > 0
+      ? `แจ้งเตือนเข้าเรียน (ล่วงหน้า ${preNotifyMinutes} นาที)`
+      : 'แจ้งเตือนเริ่มชั้นเรียน';
+
+    this.sendNotification(title, body, 'start', settings);
   }
 
   sendTestNotification(settings: AppSettings) {
@@ -266,6 +285,144 @@ export class NotificationService {
       });
     } catch (e) {
       console.warn('Failed to play notification sound', e);
+    }
+  }
+
+  private stringToHash(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  async scheduleAllNativeNotifications() {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+      const pendingRes = await LocalNotifications.getPending();
+      if (pendingRes?.notifications?.length > 0) {
+        await LocalNotifications.cancel({
+          notifications: pendingRes.notifications.map((n: { id: number }) => ({ id: n.id }))
+        });
+      }
+
+      const schedule = this.store.schedule();
+      const settings = this.store.settings();
+      const isActive = this.store.isActive();
+
+      if (!isActive) return;
+
+      const notificationsToSchedule = [];
+
+      const dayMap: Record<string, number> = {
+        'sunday': 1,
+        'monday': 2,
+        'tuesday': 3,
+        'wednesday': 4,
+        'thursday': 5,
+        'friday': 6,
+        'saturday': 7
+      };
+
+      for (const session of schedule) {
+        if (!session.dayOfWeek) continue;
+        const normalizedDay = session.dayOfWeek.trim().toLowerCase();
+        const weekday = dayMap[normalizedDay];
+        if (!weekday) continue;
+
+        // A. Start Time notify (preNotifyMinutes before)
+        const preNotifyMinutes = settings.preNotifyMinutes !== undefined ? settings.preNotifyMinutes : 3;
+        const startParts = session.startTime.split(':');
+        if (startParts.length === 2) {
+          const startH = parseInt(startParts[0], 10);
+          const startM = parseInt(startParts[1], 10);
+          
+          let notifyH = startH;
+          let notifyM = startM - preNotifyMinutes;
+          let notifyWeekday = weekday;
+
+          while (notifyM < 0) {
+            notifyM += 60;
+            notifyH -= 1;
+          }
+          if (notifyH < 0) {
+            const daysToSubtract = Math.ceil(Math.abs(notifyH) / 24);
+            notifyH = (notifyH % 24 + 24) % 24;
+            notifyWeekday = weekday - daysToSubtract;
+            while (notifyWeekday < 1) {
+              notifyWeekday += 7;
+            }
+          }
+
+          const subjectName = this.resolveName(session);
+          let body = preNotifyMinutes > 0
+            ? `อีก ${preNotifyMinutes} นาทีจะเริ่มเรียน\nวิชา: ${subjectName}\nเวลา: ${session.startTime} น.`
+            : `ได้เวลาเริ่มเรียน\nวิชา: ${subjectName}\nเวลา: ${session.startTime} น.`;
+            
+          if (session.room) body += `\nเรียนห้อง: ${session.room}`;
+          if (session.teacher) body += `\nคุณครู: ${session.teacher}`;
+
+          const title = preNotifyMinutes > 0
+            ? `แจ้งเตือนเข้าเรียน (ล่วงหน้า ${preNotifyMinutes} นาที)`
+            : 'แจ้งเตือนเริ่มชั้นเรียน';
+
+          notificationsToSchedule.push({
+            id: this.stringToHash(session.id + '_start'),
+            title: title,
+            body: body,
+            schedule: {
+              on: {
+                weekday: notifyWeekday,
+                hour: notifyH,
+                minute: notifyM
+              },
+              repeats: true,
+              allowWhileIdle: true
+            },
+            sound: 'default'
+          });
+        }
+
+        // B. End Time notify (at end time)
+        if (settings.notifyEnd) {
+          const endParts = session.endTime.split(':');
+          if (endParts.length === 2) {
+            const endH = parseInt(endParts[0], 10);
+            const endM = parseInt(endParts[1], 10);
+
+            const subjectName = this.resolveName(session);
+            const body = `หมดคาบเรียนวิชา ${subjectName} แล้ว`;
+
+            notificationsToSchedule.push({
+              id: this.stringToHash(session.id + '_end'),
+              title: 'หมดคาบเรียน',
+              body: body,
+              schedule: {
+                on: {
+                  weekday: weekday,
+                  hour: endH,
+                  minute: endM
+                },
+                repeats: true,
+                allowWhileIdle: true
+              },
+              sound: 'default'
+            });
+          }
+        }
+      }
+
+      if (notificationsToSchedule.length > 0) {
+        await LocalNotifications.schedule({
+          notifications: notificationsToSchedule
+        });
+        console.log(`Successfully scheduled ${notificationsToSchedule.length} native weekly alarms!`);
+      }
+    } catch (err) {
+      console.warn('Failed to schedule native Local Notifications:', err);
     }
   }
 }

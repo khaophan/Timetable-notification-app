@@ -13,6 +13,7 @@ export class AppStore {
     notifyRoom: true,
     notifyEnd: true,
     popupDuration: 10,
+    preNotifyMinutes: 3,
   });
   readonly isActive = signal<boolean>(true);
   readonly activeNotification = signal<ActiveNotification | null>(null);
@@ -46,6 +47,34 @@ export class AppStore {
     });
   }
 
+  private cleanUpSchedule(list: ClassSession[]): ClassSession[] {
+    return list.map(session => {
+      // Check if it is the 10th period (starting at 15:40)
+      if (session.startTime === '15:40') {
+        const trimmedCode = (session.subjectCode || '').trim();
+        const trimmedName = (session.subjectName || '').trim();
+        const trimmedTeacher = (session.teacher || '').trim();
+        const trimmedRoom = (session.room || '').trim();
+
+        // If it was empty or has "โฮมรูม" but lacks all other class-specific data
+        if (
+          (!trimmedCode && !trimmedTeacher && !trimmedRoom) ||
+          ((trimmedName === 'โฮมรูม' || !trimmedName) && !trimmedCode && !trimmedTeacher && !trimmedRoom) ||
+          trimmedName === 'เลิกเรียน'
+        ) {
+          return {
+            ...session,
+            subjectCode: '',
+            subjectName: 'เลิกเรียน',
+            teacher: '',
+            room: ''
+          };
+        }
+      }
+      return session;
+    });
+  }
+
   private async loadState() {
     try {
       let storedSchedule: string | null = null;
@@ -62,7 +91,10 @@ export class AppStore {
         storedActive = localStorage.getItem('sched_active');
       }
 
-      if (storedSchedule) this.schedule.set(JSON.parse(storedSchedule));
+      if (storedSchedule) {
+        const parsed = JSON.parse(storedSchedule);
+        this.schedule.set(this.cleanUpSchedule(parsed));
+      }
       if (storedSettings) this.settings.set(JSON.parse(storedSettings));
       if (storedActive !== null) this.isActive.set(JSON.parse(storedActive));
     } catch (e) {
@@ -71,7 +103,7 @@ export class AppStore {
   }
 
   updateSchedule(newSchedule: ClassSession[]) {
-    this.schedule.set(newSchedule);
+    this.schedule.set(this.cleanUpSchedule(newSchedule));
   }
 
   updateSettings(newSettings: Partial<AppSettings>) {

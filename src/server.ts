@@ -60,7 +60,8 @@ app.post('/api/gemini/parse', async (req, res) => {
                 '2. If a subject name is missing but a subject code is present, DO NOT try to infer the subject name. Leave it as an empty string.\n' +
                 '3. Convert Day of Week to English like "Monday", "Tuesday", etc. (for internal logic).\n' +
                 '4. Ensure startTime and endTime are in "HH:MM" 24h format.\n' +
-                '5. If the schedule is in a grid, carefully map the times to the correct days.'
+                '5. If the schedule is in a grid, carefully map the times to the correct days.\n' +
+                '6. If a cell/slot in the 10th period (starting at 15:40) of the grid is empty/blank in the input image, set its subjectName to "เลิกเรียน" (End of School) and keep subjectCode, room, and teacher as empty strings.'
               }
             ]
           },

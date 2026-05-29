@@ -374,47 +374,72 @@
                 class="flex gap-4 items-stretch"
                 [class.gap-6]="status !== 'future'"
               >
-                <!-- Triple Time Column -->
-                <div
-                  class="shrink-0 flex flex-col justify-between items-center border-r border-slate-100 pr-4 py-1"
-                  [class.w-20]="status !== 'future'"
-                  [class.w-16]="status === 'future'"
-                  [class.pr-5]="status !== 'future'"
-                >
-                  <div
-                    class="text-[10px] font-black"
-                    [class.text-indigo-500]="status === 'current'"
-                    [class.text-slate-400]="status !== 'current'"
-                  >
-                    {{ session.startTime }}
-                  </div>
-
-                  @if (status === 'current') {
-                  <div class="flex flex-col items-center py-2">
-                    <div
-                      class="text-xs font-black text-indigo-600 tabular-nums animate-pulse"
-                    >
-                      {{ getCountdown(session) }}
-                    </div>
-                    <div
-                      class="text-[8px] font-bold text-indigo-400 uppercase tracking-widest"
-                    >
-                      เหลืออีก
-                    </div>
-                  </div>
-                  } @else {
-                  <div
-                    [class.h-8]="status !== 'future'"
-                    [class.h-1]="status === 'future'"
-                  ></div>
-                  }
-
-                  <div
-                    class="text-[10px] font-black text-slate-400 uppercase tracking-tighter"
-                  >
-                    {{ session.endTime }}
-                  </div>
-                </div>
+                 <!-- Triple Time Column -->
+                 <div
+                   class="shrink-0 flex flex-col justify-between items-center border-r border-slate-100 pr-4 py-1"
+                   [class.w-24]="status !== 'future'"
+                   [class.w-20]="status === 'future'"
+                   [class.pr-5]="status !== 'future'"
+                 >
+                   <div
+                     class="text-[10px] font-black flex flex-col items-center"
+                     [class.text-indigo-500]="status === 'current'"
+                     [class.text-slate-400]="status !== 'current'"
+                   >
+                     <span>{{ session.startTime }}</span>
+                     @if (preNotifyMinutes() > 0 && status !== 'past') {
+                       <span class="text-[7.5px] font-bold text-slate-400 leading-none">
+                         (กริ่ง {{ getBellTime(session) }})
+                       </span>
+                     }
+                   </div>
+ 
+                   @if (status === 'current') {
+                   <div class="flex flex-col items-center py-2">
+                     <div
+                       class="text-xs font-black text-indigo-600 tabular-nums animate-pulse"
+                     >
+                       {{ getCountdown(session) }}
+                     </div>
+                     <div
+                       class="text-[8px] font-bold text-indigo-400 uppercase tracking-widest text-center"
+                     >
+                       เหลือเวลา
+                     </div>
+                     @if (preNotifyMinutes() > 0) {
+                     <div class="text-[7.5px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1 py-0.5 mt-1 animate-pulse">
+                       แจ้งเตือนแล้ว
+                     </div>
+                     }
+                   </div>
+                   } @else {
+                     @if (status === 'future' && getBellCountdown(session)) {
+                     <div class="flex flex-col items-center py-1 px-1 my-0.5 bg-emerald-50 border border-emerald-100/50 rounded-lg w-full select-none">
+                       <div
+                         class="text-[9px] font-black text-emerald-600 tabular-nums animate-pulse"
+                       >
+                         {{ getBellCountdown(session) }}
+                       </div>
+                       <div
+                         class="text-[7px] font-extrabold text-emerald-500 uppercase tracking-widest text-center scaling-none"
+                       >
+                         ก่อนกริ่ง
+                       </div>
+                     </div>
+                     } @else {
+                     <div
+                       [class.h-8]="status !== 'future'"
+                       [class.h-1]="status === 'future'"
+                     ></div>
+                     }
+                   }
+ 
+                   <div
+                     class="text-[10px] font-black text-slate-400 uppercase tracking-tighter"
+                   >
+                     {{ session.endTime }}
+                   </div>
+                 </div>
 
                 <!-- Details -->
                 <div class="flex-1 py-1">
@@ -1033,6 +1058,36 @@
               </div>
             </div>
 
+            <div class="p-5 border-t border-slate-100/50">
+              <div class="flex justify-between items-center mb-2">
+                <div class="text-sm font-bold text-slate-700">
+                  แจ้งเตือนล่วงหน้าก่อนเริ่มคาบเรียน
+                </div>
+                <div
+                  class="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg"
+                >
+                  {{ preNotifyMinutes() === 0 ? 'แจ้งเตือนตรงเวลา' : preNotifyMinutes() + ' นาที' }}
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="15"
+                step="1"
+                [value]="preNotifyMinutes()"
+                (input)="updateSetting('preNotifyMinutes', +$any($event.target).value)"
+                class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+              />
+              <div class="flex justify-between mt-1 px-1">
+                <span class="text-[8px] font-bold text-slate-400 uppercase"
+                  >ตรงเวลา (0 นาที)</span
+                >
+                <span class="text-[8px] font-bold text-slate-400 uppercase"
+                  >15 นาทีก่อนเริ่มเรียน</span
+                >
+              </div>
+            </div>
+
             <div class="p-5">
               <div class="flex justify-between items-center mb-3">
                 <div>
@@ -1254,9 +1309,13 @@
           >
             <mat-icon class="!w-4 !h-4 !text-[16px] opacity-60">info</mat-icon>
             <div>
-              <strong>หมายเหตุ:</strong> การแจ้งเตือนจะปรากฏขึ้นประมาณ 3
-              นาทีก่อนเริ่มคาบเรียน
-              จำเป็นต้องเปิดแท็บแอปพลิเคชันค้างไว้เพื่อการทำงานที่เสถียรที่สุด
+              <strong>หมายเหตุ:</strong> การแจ้งเตือนจะทำงานประมาณ
+              @if (preNotifyMinutes() > 0) {
+                {{ preNotifyMinutes() }} นาทีก่อนเริ่มคาบเรียน
+              } @else {
+                เมื่อถึงเวลาเริ่มคาบเรียนพอดี
+              }
+              จำเป็นต้องเปิดแท็บแอปพลิเคชันค้างไว้เพื่อการทำงานที่เสถียรที่สุดในการใช้งานบนเว็บ
             </div>
           </div>
         </section>

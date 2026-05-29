@@ -46,6 +46,7 @@ export class App implements OnInit {
   isInAppBrowser = signal(false);
   isStandalone = signal(typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as { standalone?: boolean }).standalone === true));
   swStatus = signal<'checking' | 'registered' | 'failed' | 'not_supported'>('checking');
+  preNotifyMinutes = computed(() => this.store.settings().preNotifyMinutes ?? 3);
 
   editForm = new FormGroup({
     id: new FormControl('', { nonNullable: true }),
@@ -296,6 +297,49 @@ export class App implements OnInit {
     
     const diff = endTime.getTime() - now.getTime();
     if (diff <= 0) return '00:00';
+    
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  getBellTime(session: ClassSession): string {
+    const preNotifyMinutes = this.preNotifyMinutes();
+    const [startH, startM] = session.startTime.split(':').map(Number);
+    let notifyH = startH;
+    let notifyM = startM - preNotifyMinutes;
+    while (notifyM < 0) {
+      notifyM += 60;
+      notifyH -= 1;
+    }
+    if (notifyH < 0) {
+      notifyH = (notifyH % 24 + 24) % 24;
+    }
+    return `${notifyH.toString().padStart(2, '0')}:${notifyM.toString().padStart(2, '0')}`;
+  }
+
+  getBellCountdown(session: ClassSession): string | null {
+    const now = this.currentTime();
+    
+    // Calculate bell/notification target date for today
+    const [startH, startM] = session.startTime.split(':').map(Number);
+    const preNotifyMinutes = this.preNotifyMinutes();
+    
+    let notifyH = startH;
+    let notifyM = startM - preNotifyMinutes;
+    while (notifyM < 0) {
+      notifyM += 60;
+      notifyH -= 1;
+    }
+    if (notifyH < 0) {
+      notifyH = (notifyH % 24 + 24) % 24;
+    }
+    
+    const bellTime = new Date(now);
+    bellTime.setHours(notifyH, notifyM, 0, 0);
+    
+    const diff = bellTime.getTime() - now.getTime();
+    if (diff <= 0) return null; // Already passed
     
     const mins = Math.floor(diff / 60000);
     const secs = Math.floor((diff % 60000) / 1000);

@@ -17,6 +17,7 @@ export interface AppSettings {
   notifyEnd: boolean;
   notificationSound?: string; // Base64 storage
   popupDuration: number; // in seconds
+  preNotifyMinutes?: number; // Minutes before class starts (default: 3)
 }
 
 export interface ActiveNotification {
