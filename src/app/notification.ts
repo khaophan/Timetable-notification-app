@@ -96,17 +96,20 @@ export class NotificationService {
     for (let i = 0; i < todayClasses.length; i++) {
       const session = todayClasses[i];
 
-      // Check start time (1 min before)
+      // Check start time (3 mins before)
       const startParts = session.startTime.split(':');
       if (startParts.length === 2) {
         const startH = parseInt(startParts[0], 10);
         const startM = parseInt(startParts[1], 10);
         
         let notifyH = startH;
-        let notifyM = startM - 1;
+        let notifyM = startM - 3;
         if (notifyM < 0) {
           notifyM += 60;
           notifyH -= 1;
+          if (notifyH < 0) {
+            notifyH += 24;
+          }
         }
 
         if (currentHours === notifyH && currentMinutes === notifyM) {
@@ -153,15 +156,14 @@ export class NotificationService {
 
   private sendClassTransitionNotification(time: string, prev: ClassSession | null, next: ClassSession, classNum: number, settings: AppSettings) {
     const nextName = this.resolveName(next);
-    const prevName = prev ? this.resolveName(prev) : 'พักผ่อน/ก่อนเข้าเรียน';
     
-    const prefix = classNum === 1 ? 'เริ่มเรียนคาบแรก' : `เริ่มเรียนคาบที่ ${classNum}`;
+    const prefix = classNum === 1 ? 'คาบแรก' : `คาบที่ ${classNum}`;
     
-    let body = `ขณะนี้เวลา ${time} น. (${prefix})\nเปลี่ยนจาก ${prevName} → ${nextName}`;
+    let body = `อีก 3 นาทีจะเริ่มเรียน (${prefix})\nวิชา: ${nextName}\nเวลาเข้าเรียน: ${next.startTime} น.`;
     if (next.room) body += `\nเรียนห้อง: ${next.room}`;
     if (next.teacher) body += `\nคุณครู: ${next.teacher}`;
 
-    this.sendNotification('เปลี่ยนคาบเรียน', body, 'start', settings);
+    this.sendNotification('แจ้งเตือนเข้าเรียน (ล่วงหน้า 3 นาที)', body, 'start', settings);
   }
 
   sendTestNotification(settings: AppSettings) {

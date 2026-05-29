@@ -44,7 +44,7 @@ export class App implements OnInit {
   isCheckingUpdate = signal(false);
   isInIframe = signal(typeof window !== 'undefined' && window.self !== window.top);
   isInAppBrowser = signal(false);
-  isStandalone = signal(typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true));
+  isStandalone = signal(typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as { standalone?: boolean }).standalone === true));
   swStatus = signal<'checking' | 'registered' | 'failed' | 'not_supported'>('checking');
 
   editForm = new FormGroup({

@@ -86,8 +86,9 @@ app.post('/api/gemini/parse', async (req, res) => {
           }
         });
         break; // Sucess, break out of retry loop
-      } catch (err: any) {
-        if (retries === 0 || err.status !== 429) {
+      } catch (err: unknown) {
+        const errorObject = err as { status?: number; message?: string };
+        if (retries === 0 || errorObject.status !== 429) {
           throw err;
         }
         console.warn(`[Gemini API] Rate limited. Retrying... (${retries} attempts left)`);
@@ -109,13 +110,14 @@ app.post('/api/gemini/parse', async (req, res) => {
     
     const parsed = JSON.parse(text);
     res.json(parsed);
-  } catch (error: any) {
-    if (error?.status === 429) {
+  } catch (error: unknown) {
+    const err = error as { status?: number; message?: string };
+    if (err?.status === 429) {
       console.error('[Gemini API] Failed to parse: Quota exceeded (429).');
-      res.status(429).json({ error: 'RESOURCE_EXHAUSTED', message: error.message || String(error) });
+      res.status(429).json({ error: 'RESOURCE_EXHAUSTED', message: err.message || String(error) });
     } else {
       console.error('Error parsing schedule with Gemini:', error);
-      res.status(500).json({ error: error.message || String(error) });
+      res.status(500).json({ error: err.message || String(error) });
     }
   }
 });
@@ -135,12 +137,32 @@ app.use(
  * Handle all other requests by rendering the Angular application.
  */
 app.use((req, res, next) => {
+  const originalHost = req.headers.host;
+  const originalXForwardedHost = req.headers['x-forwarded-host'];
+
+  // Force 'localhost' to bypass Angular Node App Engine's allowedHosts restriction
+  req.headers.host = 'localhost';
+  if (req.headers['x-forwarded-host']) {
+    delete req.headers['x-forwarded-host'];
+  }
+
   angularApp
     .handle(req)
-    .then((response) =>
-      response ? writeResponseToNodeResponse(response, res) : next(),
-    )
-    .catch(next);
+    .then((response) => {
+      // Restore original headers for downstream middleware
+      req.headers.host = originalHost;
+      if (originalXForwardedHost !== undefined) {
+        req.headers['x-forwarded-host'] = originalXForwardedHost;
+      }
+      return response ? writeResponseToNodeResponse(response, res) : next();
+    })
+    .catch((err) => {
+      req.headers.host = originalHost;
+      if (originalXForwardedHost !== undefined) {
+        req.headers['x-forwarded-host'] = originalXForwardedHost;
+      }
+      next(err);
+    });
 });
 
 /**
