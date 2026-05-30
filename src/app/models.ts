@@ -18,6 +18,7 @@ export interface AppSettings {
   notificationSound?: string; // Base64 storage
   popupDuration: number; // in seconds
   preNotifyMinutes?: number; // Minutes before class starts (default: 3)
+  calendarHolidays?: Record<string, string>; // YYYY-MM-DD -> Holiday Name
 }
 
 export interface ActiveNotification {

@@ -14,6 +14,7 @@ export class AppStore {
     notifyEnd: true,
     popupDuration: 10,
     preNotifyMinutes: 3,
+    calendarHolidays: {},
   });
   readonly isActive = signal<boolean>(true);
   readonly activeNotification = signal<ActiveNotification | null>(null);
@@ -112,5 +113,35 @@ export class AppStore {
 
   toggleActive(active: boolean) {
     this.isActive.set(active);
+  }
+
+  async resetAll() {
+    this.schedule.set([]);
+    this.settings.set({
+      notifyTeacher: true,
+      notifySubjectCode: true,
+      notifySubjectName: true,
+      notifyRoom: true,
+      notifyEnd: true,
+      popupDuration: 10,
+      preNotifyMinutes: 3,
+      calendarHolidays: {},
+    });
+    this.isActive.set(true);
+    this.activeNotification.set(null);
+
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Preferences.remove({ key: 'sched_schedule' });
+        await Preferences.remove({ key: 'sched_settings' });
+        await Preferences.remove({ key: 'sched_active' });
+      } else if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('sched_schedule');
+        localStorage.removeItem('sched_settings');
+        localStorage.removeItem('sched_active');
+      }
+    } catch (e) {
+      console.warn('Failed to clear state:', e);
+    }
   }
 }

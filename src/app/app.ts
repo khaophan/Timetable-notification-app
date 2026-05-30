@@ -6,6 +6,7 @@ import { AppStore } from './store';
 import { GeminiService } from './gemini';
 import { NotificationService } from './notification';
 import { ClassSession } from './models';
+import { CalendarDay, CalendarMonth, THAI_MONTHS, PUBLIC_HOLIDAYS_2026 } from './calendar';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { environment } from '../environments/environment';
@@ -28,7 +29,7 @@ export class App implements OnInit {
   notification = inject(NotificationService);
   notificationPermission = signal<NotificationPermission | 'unsupported'>('default');
 
-  activeTab = signal<'home' | 'schedule' | 'settings'>('home');
+  activeTab = signal<'home' | 'schedule' | 'calendar' | 'settings'>('home');
   isProcessing = signal(false);
   currentTime = signal<Date>(new Date());
   
@@ -47,6 +48,127 @@ export class App implements OnInit {
   isStandalone = signal(typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as { standalone?: boolean }).standalone === true));
   swStatus = signal<'checking' | 'registered' | 'failed' | 'not_supported'>('checking');
   preNotifyMinutes = computed(() => this.store.settings().preNotifyMinutes ?? 3);
+  calendarMonths = computed(() => this.generateCalendar());
+  selectedDate = signal<CalendarDay | null>(null);
+  showHolidayEditor = signal(false);
+  editingHolidayName = signal('');
+  
+  generateCalendar(): CalendarMonth[] {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    
+    // Default public holidays for 2026/current year
+    const publicHolidays = PUBLIC_HOLIDAYS_2026; 
+    const customHolidays = this.store.settings().calendarHolidays || {};
+
+    const months: CalendarMonth[] = [];
+    
+    for (let m = currentMonth; m < 12; m++) {
+      const monthDays: CalendarDay[] = [];
+      const firstDay = new Date(currentYear, m, 1);
+      const lastDay = new Date(currentYear, m + 1, 0);
+      
+      // Calculate padding days to start on Sunday padding
+      const padding = firstDay.getDay(); 
+      for (let i = 0; i < padding; i++) {
+        monthDays.push({
+          date: new Date(currentYear, m, 1 - (padding - i)),
+          dateString: '',
+          isToday: false,
+          isCurrentMonth: false,
+          isWeekend: false
+        });
+      }
+      
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const date = new Date(currentYear, m, d);
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const dateString = `${yyyy}-${mm}-${dd}`;
+        
+        const isToday = 
+          date.getDate() === today.getDate() && 
+          date.getMonth() === today.getMonth() && 
+          date.getFullYear() === today.getFullYear();
+          
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+        const dayItem: CalendarDay = {
+          date,
+          dateString,
+          isToday,
+          isCurrentMonth: true,
+          isWeekend
+        };
+        
+        // Merge holidays
+        const customName = customHolidays[dateString];
+        const publicName = publicHolidays[dateString];
+        
+        if (customName) {
+           dayItem.holidayName = customName;
+           dayItem.isCustomHoliday = true;
+        } else if (publicName) {
+           dayItem.holidayName = publicName;
+           dayItem.isCustomHoliday = false;
+        } else if (isWeekend) {
+           dayItem.holidayName = date.getDay() === 0 ? 'วันอาทิตย์' : 'วันเสาร์';
+           dayItem.isCustomHoliday = true; // treat weekend as a rest day explicitly
+        }
+
+        monthDays.push(dayItem);
+      }
+      
+      months.push({
+        year: currentYear,
+        month: m,
+        name: THAI_MONTHS[m],
+        days: monthDays
+      });
+    }
+    return months;
+  }
+  
+  openHolidayEditor(day: CalendarDay) {
+    if (!day.isCurrentMonth) return;
+    this.selectedDate.set(day);
+    this.editingHolidayName.set(day.holidayName && day.holidayName !== 'วันเสาร์' && day.holidayName !== 'วันอาทิตย์' ? day.holidayName : '');
+    this.showHolidayEditor.set(true);
+  }
+  
+  saveHoliday() {
+    const day = this.selectedDate();
+    if (!day) return;
+    
+    // We only save to custom holidays
+    const current = { ...(this.store.settings().calendarHolidays || {}) };
+    const name = this.editingHolidayName().trim();
+    if (name) {
+      current[day.dateString] = name;
+    } else {
+      delete current[day.dateString];
+    }
+    this.store.updateSettings({ calendarHolidays: current });
+    this.showHolidayEditor.set(false);
+  }
+  
+  isSchoolHoliday(dateString: string): { isHoliday: boolean, name?: string } {
+     const customHolidays = this.store.settings().calendarHolidays || {};
+     
+     if (customHolidays[dateString]) return { isHoliday: true, name: customHolidays[dateString] };
+     if (PUBLIC_HOLIDAYS_2026[dateString]) return { isHoliday: true, name: PUBLIC_HOLIDAYS_2026[dateString] };
+     
+     const parts = dateString.split('-');
+     if (parts.length === 3) {
+       const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+       const dayOfWeek = date.getDay();
+       if (dayOfWeek === 0) return { isHoliday: true, name: 'วันอาทิตย์' };
+       if (dayOfWeek === 6) return { isHoliday: true, name: 'วันเสาร์' };
+     }
+     
+     return { isHoliday: false };
+  }
 
   editForm = new FormGroup({
     id: new FormControl('', { nonNullable: true }),
@@ -270,7 +392,17 @@ export class App implements OnInit {
   resolveSubjectName(session: ClassSession): string {
     const code = (session.subjectCode || '').trim().toUpperCase();
     const mapping = this.subjectMappings();
-    return mapping[code] || session.subjectName || code || 'ไม่ระบุวิชา';
+    const name = mapping[code] || session.subjectName || code || '';
+    
+    // Check if it's the last session of the day
+    const allSessionsToday = this.store.schedule().filter(s => s.dayOfWeek === session.dayOfWeek).sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const isLast = allSessionsToday.length > 0 && allSessionsToday[allSessionsToday.length - 1].id === session.id;
+
+    if (isLast && (!name || name === 'โฮมรูม' || name === 'ว่าง')) {
+       return 'เลิกเรียน';
+    }
+    
+    return name || 'ไม่ระบุวิชา';
   }
 
   getClassStatus(session: ClassSession): 'past' | 'current' | 'future' {
@@ -391,11 +523,14 @@ export class App implements OnInit {
 
   currentDaySchedule = computed(() => {
     const list = this.store.schedule();
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    return list.filter(c => c.dayOfWeek === today).sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const today = this.currentTime();
+    const todayStr = days[today.getDay()];
+    return list.filter(c => c.dayOfWeek === todayStr).sort((a, b) => a.startTime.localeCompare(b.startTime));
   });
 
   isSchoolOutForToday = computed(() => {
+    if (this.todayHolidayInfo().isHoliday) return true;
     const todayList = this.currentDaySchedule();
     if (todayList.length === 0) return true;
     
@@ -407,22 +542,50 @@ export class App implements OnInit {
     if (list.length === 0) return null;
 
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    const todayIdx = days.indexOf(todayStr);
-
-    for (let i = 1; i <= 7; i++) {
-      const checkIdx = (todayIdx + i) % 7;
-      const checkStr = days[checkIdx];
-      const classes = list.filter(c => c.dayOfWeek === checkStr).sort((a, b) => a.startTime.localeCompare(b.startTime));
-      if (classes.length > 0) {
-        return {
-          day: checkStr,
-          isTomorrow: i === 1,
-          classes
-        };
+    const today = this.currentTime();
+    
+    for (let i = 1; i <= 30; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() + i);
+      
+      const yyyy = checkDate.getFullYear();
+      const mm = String(checkDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(checkDate.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      
+      if (this.isSchoolHoliday(dateStr).isHoliday) {
+         continue; // skip holidays
       }
+      
+      const checkStr = days[checkDate.getDay()];
+      const classes = list.filter(c => c.dayOfWeek === checkStr).sort((a, b) => a.startTime.localeCompare(b.startTime));
+      
+      return {
+        day: checkStr,
+        isTomorrow: i === 1,
+        classes
+      };
     }
     return null;
+  });
+
+  todayHolidayInfo = computed(() => {
+    const today = this.currentTime();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return this.isSchoolHoliday(`${yyyy}-${mm}-${dd}`);
+  });
+
+  tomorrowHolidayInfo = computed(() => {
+    const today = this.currentTime();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const yyyy = tomorrow.getFullYear();
+    const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const dd = String(tomorrow.getDate()).padStart(2, '0');
+    return this.isSchoolHoliday(`${yyyy}-${mm}-${dd}`);
   });
 
   async ngOnInit() {
@@ -492,12 +655,28 @@ export class App implements OnInit {
     this.githubRepo.set(repo);
   }
 
-  setTab(tab: 'home' | 'schedule' | 'settings') {
+  setTab(tab: 'home' | 'schedule' | 'settings' | 'calendar') {
     this.activeTab.set(tab);
   }
 
   toggleActive() {
     this.store.toggleActive(!this.store.isActive());
+  }
+
+  showResetConfirm = signal(false);
+
+  confirmReset() {
+    this.showResetConfirm.set(true);
+  }
+
+  async executeReset() {
+    await this.store.resetAll();
+    this.showResetConfirm.set(false);
+    this.setTab('home');
+  }
+
+  cancelReset() {
+    this.showResetConfirm.set(false);
   }
 
   translateDay(day: string): string {
