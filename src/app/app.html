@@ -1537,44 +1537,124 @@
         </section>
 
         <section>
-          <div
-            class="bg-indigo-600 rounded-[32px] p-6 shadow-xl shadow-indigo-200/50 text-white overflow-hidden relative"
-          >
-            <div class="relative z-10">
-              <div class="flex items-center justify-between mb-4">
+          <div class="bg-slate-900 rounded-[32px] p-6 shadow-xl text-white overflow-hidden relative border border-slate-800">
+            <!-- Header -->
+            <div class="relative z-10 mb-5">
+              <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                  <div class="p-2 bg-white/20 rounded-xl backdrop-blur-md">
-                    <mat-icon>psychology</mat-icon>
+                  <div class="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
+                    <mat-icon class="text-indigo-400">psychology</mat-icon>
                   </div>
                   <div>
-                    <h3 class="text-sm font-bold">ระบบอัจฉริยะ AI</h3>
-                    <p
-                      class="text-[10px] font-bold text-indigo-100 uppercase tracking-widest mt-0.5"
-                    >
-                      สถานะ: พร้อมใช้งาน
-                    </p>
+                    <h3 class="text-xs font-black uppercase tracking-wider text-slate-400">ระบบ AI และ สถาปัตยกรรมมือถือ</h3>
+                    <h2 class="text-md font-bold text-white mt-0.5">การตั้งค่าสำหรับการแปลงเป็น APK / Play Store</h2>
                   </div>
                 </div>
+                <span class="text-[10px] bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-full font-black flex items-center gap-1.5 label-pulse">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  ระบบพร้อม 100%
+                </span>
+              </div>
+            </div>
+
+            <!-- Configurations form -->
+            <div class="relative z-10 space-y-4 pt-1 mb-5">
+              <!-- Backend Server URL Config -->
+              <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="text-[11px] font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                    <mat-icon class="text-indigo-400 !w-4 !h-4 !text-[16px]">dns</mat-icon>
+                    <span>ที่อยู่เซิร์ฟเวอร์หลังบ้าน (API Server URL)</span>
+                  </div>
+                  @if (isNativePlatform()) {
+                    <span class="text-[9px] font-bold text-indigo-400">โหมดระบบปิด (Android App)</span>
+                  }
+                </div>
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    [value]="backendApiUrl()"
+                    (input)="backendApiUrl.set($any($event.target).value)"
+                    placeholder="e.g. https://your-server-domain.com"
+                    class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-mono text-indigo-300 placeholder:text-slate-600"
+                  />
+                  <button
+                    (click)="saveBackendApiUrl()"
+                    class="bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition-all text-white font-black text-xs px-4 py-2 rounded-xl border border-indigo-500 shadow"
+                  >
+                    บันทึก
+                  </button>
+                </div>
+                <p class="text-[9px] text-slate-400 leading-normal font-medium">
+                  💡 <b>ผู้ใช้งานทั่วไป:</b> แนะนำให้ใช้ตามค่าเริ่มต้น (ระบบจะเชื่อมต่อเซิร์ฟเวอร์คลาวด์อัตโนมัติ) เพื่อให้การสแกนตารางเรียนด้วย AI และการซิงค์ข้อมูลทำงานได้ 100% ไม่มีข้อผิดพลาด
+                </p>
               </div>
 
-              <div class="bg-black/20 rounded-2xl p-4 border border-white/10">
-                <p class="text-[10px] leading-relaxed opacity-90">
-                  <span class="text-emerald-300 font-bold"
-                    >✨ AI Studio Web Ready:</span
+              <!-- Gemini API Key Config -->
+              <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="text-[11px] font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                    <mat-icon class="text-emerald-400 !w-4 !h-4 !text-[16px]">key</mat-icon>
+                    <span>คีย์ Gemini API ส่วนตัว (Gemini API Key - เสริม)</span>
+                  </div>
+                  <span class="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-black">Option</span>
+                </div>
+                <div class="flex gap-2">
+                  <input
+                    type="password"
+                    [value]="userGeminiKey()"
+                    (input)="userGeminiKey.set($any($event.target).value)"
+                    placeholder="ป้อน GEMINI_API_KEY ของคุณ..."
+                    class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 font-mono text-emerald-300 placeholder:text-slate-600"
+                  />
+                  <button
+                    (click)="saveGeminiKey()"
+                    class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all text-white font-black text-xs px-4 py-2 rounded-xl border border-emerald-500 shadow"
                   >
-                  แอปของคุณกำลังทำงานในรูปแบบเว็บแอปพลิเคชัน
-                  ข้อมูลตารางเรียนของคุณจะถูกบันทึกไว้ในเบราว์เซอร์โดยอัตโนมัติ
+                    บันทึก
+                  </button>
+                </div>
+                <p class="text-[9px] text-slate-400 leading-normal font-medium">
+                  🔒 <b>ทำไมต้องใส่ข้อนี้?</b> หากคุณใส่คีย์นี้ แอปพลิเคชันบน Android / APK จะเรียกประมวลผลโมเดล Gemini โดยตรงจากฝั่งมือถือทันที โดยไม่จำเป็นต้องผ่านเซิร์ฟเวอร์ใดๆ ช่วยประหยัดค่าใช้จ่าย ปลอดภัย 100% สะดวกสไตล์เซิร์ฟเวอร์เลส
                 </p>
+              </div>
+
+              <!-- APK Export & Play Store publishing guide -->
+              <div class="bg-slate-950/75 border border-indigo-500/15 rounded-2xl p-4 space-y-3">
+                <div class="flex items-center gap-2 text-indigo-400">
+                  <mat-icon class="!w-4 !h-4 !text-[16px]">android</mat-icon>
+                  <span class="text-xs font-black uppercase tracking-wider">คู่มือการแปลงแอปเป็น APK & ลงระบบ Play Store</span>
+                </div>
+                
+                <p class="text-[10px] text-slate-300 leading-normal font-semibold text-justify">
+                  แอปตารางเรียนอัจฉริยะนี้ถูกออกแบบโครงสร้างโปรเจ็กต์โดยใช้ <b>Capacitor</b> ไว้ล่วงหน้าแล้ว ทำให้คุณสามารถ Export และแปลงเป็นแพ็คเกจ <code>.apk</code> หรือ <code>.aab</code> เพื่อส่งขึ้น Google Play Store ได้ทันที ผ่าน 3 ขั้นตอนดังนี้ครับ:
+                </p>
+
+                <div class="space-y-2 border-t border-slate-800/60 pt-2 text-[10px]">
+                  <div class="flex gap-2">
+                    <span class="font-extrabold text-indigo-400 shrink-0">ขั้นตอนที่ 1:</span>
+                    <span class="text-slate-300"><b>บิวต์ไฟล์เว็บไซต์ในโปรเจกต์</b><br>รันคำสั่ง <code>npm run build</code> เพื่อคอมไพล์โปรเจ็กต์ Angular ไว้ในโฟลเดอร์ <code>dist/app/browser</code></span>
+                  </div>
+                  <div class="flex gap-2">
+                    <span class="font-extrabold text-indigo-400 shrink-0">ขั้นตอนที่ 2:</span>
+                    <span class="text-slate-300"><b>ผูกเข้ากับ Android Platform (Capacitor Sync)</b><br>ทำได้ง่ายๆ โดยเปิดระบบ Terminal แล้วรันคำสั่ง <code>npx cap add android</code> และตามด้วย <code>npx cap sync</code> เพื่อซิงก์ข้อมูลแอปพลิเคชันล่าสุดเข้าไปยังโฟลเดอร์ฝั่งมือถือ</span>
+                  </div>
+                  <div class="flex gap-2">
+                    <span class="font-extrabold text-indigo-400 shrink-0">ขั้นตอนที่ 3:</span>
+                    <span class="text-slate-300"><b>สแกนออกเป็นไฟล์ APK / ส่งเซ็นสัญญา Google Play Console</b><br>เปิดคอมพิวเตอร์ด้วยโปรแกรม Android Studio และเรียกเปิดโฟลเดอร์ <code>android</code> จากนั้นคลิกเมนู <b>Build &gt; Build Bundle(s) / APK(s) &gt; Build APK</b> เพื่อสร้างไฟล์ APK ติดตั้งในเครื่อง หรือเลือก <b>Generate Signed Bundle</b> สำหรับส่งเข้า Google Play Console เพื่อขึ้นบน Google Play Store อย่างครอบคลุม 100%!</span>
+                  </div>
+                </div>
+
+                <div class="bg-indigo-500/5 rounded-xl border border-indigo-500/10 p-2.5 text-[9px] text-slate-300 leading-normal flex gap-2">
+                  <mat-icon class="text-indigo-400 shrink-0 !w-4 !h-4 !text-[16px]">info</mat-icon>
+                  <span><b>เสถียรภาพและคุณภาพ 100%:</b> ระบบตารางเรียนจะซิงก์ข้อมูล ขยายสิทธิเข้าเช็คคาบเรียนถัดไป จับสแนปรูปภาพตารางเรียนผ่านกล้อง และแจ้งเตือนด้วย Local Notifications อย่างสมบูรณ์แบบปลอดภัยที่สุด</span>
+                </div>
               </div>
             </div>
 
             <!-- Deco circles -->
-            <div
-              class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"
-            ></div>
-            <div
-              class="absolute -left-10 -top-10 w-32 h-32 bg-indigo-400/20 rounded-full blur-3xl"
-            ></div>
+            <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-3xl"></div>
+            <div class="absolute -left-10 -top-10 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl"></div>
           </div>
         </section>
 

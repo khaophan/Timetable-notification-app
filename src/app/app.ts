@@ -62,6 +62,7 @@ export class App implements OnInit {
   newMappingCode = signal('');
   newMappingName = signal('');
   userGeminiKey = signal('');
+  backendApiUrl = signal('');
   githubRepo = signal('khaophan/Timetable-notification-app');
   deferredPrompt = signal<PwaInstallPrompt | null>(null);
   editingSession = signal<ClassSession | null>(null);
@@ -401,6 +402,12 @@ export class App implements OnInit {
     const key = this.userGeminiKey().trim();
     await this.setPref('user_gemini_key', key);
     alert('บันทึก API Key เรียบร้อยแล้ว ระบบ AI พร้อมทำงาน');
+  }
+
+  async saveBackendApiUrl() {
+    const url = this.backendApiUrl().trim();
+    await this.setPref('backend_api_url', url);
+    alert('บันทึกเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว');
   }
 
   async saveGithubRepo() {
@@ -773,11 +780,12 @@ export class App implements OnInit {
     }
 
     // Load preferences async
-    const [savedMappings, geminiKey, repo, onboardingStatus] = await Promise.all([
+    const [savedMappings, geminiKey, repo, onboardingStatus, savedBackendUrl] = await Promise.all([
       this.getPref('subject_mappings'),
       this.getPref('user_gemini_key'),
       this.getPref('github_repo', 'khaophan/Timetable-notification-app'),
-      this.getPref('has_seen_onboarding', 'false')
+      this.getPref('has_seen_onboarding', 'false'),
+      this.getPref('backend_api_url')
     ]);
 
     if (savedMappings) {
@@ -789,6 +797,16 @@ export class App implements OnInit {
     }
     this.userGeminiKey.set(geminiKey);
     this.githubRepo.set(repo);
+
+    let defaultApiUrl = '';
+    if (typeof window !== 'undefined') {
+      defaultApiUrl = window.location.origin;
+    }
+    if (Capacitor.isNativePlatform()) {
+      defaultApiUrl = 'https://ais-pre-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app';
+    }
+    const backendUrl = savedBackendUrl || defaultApiUrl;
+    this.backendApiUrl.set(backendUrl);
 
     // Show onboarding if they are in Standalone/PWA mode and haven't seen it yet
     if (onboardingStatus === 'false' && typeof window !== 'undefined' && 'Notification' in window) {
