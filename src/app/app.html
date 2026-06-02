@@ -119,6 +119,9 @@
     >
       <div
         (click)="store.activeNotification.set(null)"
+        (keydown.enter)="store.activeNotification.set(null)"
+        role="button"
+        tabindex="0"
         class="bg-white/95 backdrop-blur-xl rounded-[28px] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-white/20 flex items-start gap-4 active:scale-95 transition-transform"
       >
         <div
@@ -201,6 +204,27 @@
       </div>
 
       <div class="flex items-center gap-3">
+        @if (activeTab() === 'home' && notificationPermission() !== 'granted') {
+          @if (notificationPermission() === 'denied') {
+            <button
+              (click)="handleDeniedPermissionClick()"
+              class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-extrabold text-[10px] px-3.5 py-2 rounded-2xl shadow-sm transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
+              title="สิทธิ์แจ้งเตือนถูกระงับ (คลิกเพื่อดูทางแก้)"
+            >
+              <mat-icon class="!w-4 !h-4 !text-[16px] text-red-500 animate-pulse">notifications_off</mat-icon>
+              <span>สิทธิ์ถูกระงับ! (ตั้งค่า)</span>
+            </button>
+          } @else {
+            <button
+              (click)="requestNotificationPermission()"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] px-3.5 py-2 rounded-2xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 border border-indigo-500 focus:outline-none"
+            >
+              <mat-icon class="!w-4 !h-4 !text-[16px] text-white animate-pulse">notifications_active</mat-icon>
+              <span>รับแจ้งเตือน</span>
+            </button>
+          }
+        }
+
         <span
           class="text-[10px] font-bold uppercase tracking-widest"
           [class.text-emerald-700]="store.isActive()"
@@ -723,6 +747,9 @@
               >
                 @for (session of day.classes; track session.id; let sessIdx = $index) {
                 <div
+                  role="button"
+                  tabindex="0"
+                  (keydown.enter)="editSessionData(session)"
                   class="p-4 px-5 flex justify-between items-center group cursor-pointer hover:bg-slate-50 transition-colors animate-item-entrance"
                   [style.animation-delay.ms]="(dayIdx * 50) + (sessIdx * 30)"
                   (click)="editSessionData(session)"
@@ -1595,11 +1622,11 @@
             </div>
 
             <div class="mb-6 pt-4 border-t border-slate-100">
-              <label
+              <span
                 class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3"
               >
                 นำเข้าข้อมูลรายวิชาจากไฟล์
-              </label>
+              </span>
               <div class="relative">
                 <input
                   type="file"
@@ -2004,9 +2031,9 @@
         >
           <div class="space-y-4">
             <div>
-              <label
+              <span
                 class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1"
-                >วิชา</label
+                >วิชา</span
               >
               <div class="flex gap-2">
                 <input
@@ -2026,9 +2053,9 @@
 
             <div class="flex gap-4">
               <div class="flex-1">
-                <label
+                <span
                   class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1"
-                  >เวลาเริ่ม (HH:MM)</label
+                  >เวลาเริ่ม (HH:MM)</span
                 >
                 <input
                   type="text"
@@ -2039,9 +2066,9 @@
                 />
               </div>
               <div class="flex-1">
-                <label
+                <span
                   class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1"
-                  >เวลาสิ้นสุด (HH:MM)</label
+                  >เวลาสิ้นสุด (HH:MM)</span
                 >
                 <input
                   type="text"
@@ -2054,9 +2081,9 @@
             </div>
 
             <div>
-              <label
+              <span
                 class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1"
-                >ห้องเรียน</label
+                >ห้องเรียน</span
               >
               <input
                 type="text"
@@ -2067,9 +2094,9 @@
             </div>
 
             <div>
-              <label
+              <span
                 class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1"
-                >ครูผู้สอน</label
+                >ครูผู้สอน</span
               >
               <input
                 type="text"
@@ -2143,9 +2170,9 @@
              }
            </div>
 
-           <label
+           <span
              class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1"
-           >ตั้งชื่อวันหยุด (เว้นว่างเพื่อยกเลิกวันหยุดที่สร้างเอง)</label>
+           >ตั้งชื่อวันหยุด (เว้นว่างเพื่อยกเลิกวันหยุดที่สร้างเอง)</span>
            <input
              type="text"
              [ngModel]="editingHolidayName()"
@@ -2337,57 +2364,275 @@
 
 <!-- Background Sandbox Countdown Overlay/Modal -->
 @if (appKillSandboxActive()) {
-  <div class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-white animate-fade-in animate-in duration-300">
-    <div class="bg-slate-800 rounded-[36px] w-full max-w-sm p-8 border border-white/10 text-center shadow-2xl relative overflow-hidden flex flex-col items-center">
+  <div class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[100] flex items-center justify-center p-4 text-white animate-fade-in animate-in duration-300">
+    <div class="bg-slate-800 rounded-[36px] w-full max-w-lg p-6 md:p-8 border border-white/10 text-center shadow-2xl relative overflow-hidden flex flex-col items-center max-h-[90vh]">
       <!-- Glow background effect -->
-      <div class="absolute -top-24 -left-24 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl"></div>
-      <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl"></div>
+      <div class="absolute -top-24 -left-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl"></div>
+      <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl"></div>
       
-      <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-600/30 mb-6 relative">
-        <mat-icon class="!w-8 !h-8 !text-[32px] animate-pulse">timer</mat-icon>
+      <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-600/30 mb-4 relative shrink-0">
+        <mat-icon class="!w-6 !h-6 !text-[24px] animate-pulse">phonelink_setup</mat-icon>
       </div>
 
-      <h3 class="text-xl font-black text-white tracking-tight">ระบบจำลองปิดแอปเพื่อทดสอบ</h3>
+      <h3 class="text-lg font-black text-white tracking-tight shrink-0">การจัดการทดสอบเบื้องหลัง 100%</h3>
       
-      <p class="text-xs text-slate-300 mt-2 mb-6">
-        จองแจ้งเตือนกับหน่วยความจำระบบปฏิบัติการ (OS Kernel) เรียบร้อย!
+      <p class="text-[11px] text-slate-300 mt-1 mb-4 shrink-0">
+        ตรวจสอบวิธียับยั้งโทรศัพท์ตัดไฟเลี้ยงแจ้งเตือนเบื้องหลัง (Don't Kill My App)
       </p>
 
-      <!-- Countdown Circle -->
-      <div class="relative w-32 h-32 flex items-center justify-center mb-6">
-        <div class="absolute inset-0 rounded-full border-4 border-slate-700"></div>
-        <div class="absolute inset-0 rounded-full border-4 border-indigo-500 animate-spin" style="animation-duration: 3s;"></div>
-        <span class="text-4xl font-black font-mono text-indigo-400">{{ appKillSandboxCountdown() }}</span>
+      <!-- Navigation Tabs -->
+      <div class="flex gap-1.5 p-1 bg-slate-900/60 rounded-full border border-white/5 w-full mb-5 shrink-0">
+        <button
+          (click)="appKillSandboxBrand.set('all')"
+          class="flex-1 py-2 rounded-full text-[11px] font-extrabold transition-all outline-none"
+          [class.bg-indigo-600]="appKillSandboxBrand() === 'all'"
+          [class.text-white]="appKillSandboxBrand() === 'all'"
+          [class.text-slate-400]="appKillSandboxBrand() !== 'all'"
+        >
+          ⏱️ ขั้นตอนทดสอบ (Sandbox)
+        </button>
+        <button
+          (click)="appKillSandboxBrand.set('samsung')"
+          class="flex-1 py-2 rounded-full text-[11px] font-extrabold transition-all outline-none"
+          [class.bg-indigo-600]="['all', 'guide'].indexOf(appKillSandboxBrand()) === -1"
+          [class.text-white]="['all', 'guide'].indexOf(appKillSandboxBrand()) === -1"
+          [class.text-slate-400]="['all', 'guide'].indexOf(appKillSandboxBrand()) !== -1"
+        >
+          📱 คู่มืออนุญาตเบื้องหลังรายรุ่น
+        </button>
       </div>
 
-      <!-- Action items -->
-      <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full mb-6">
-        <div class="flex gap-3">
-          <span class="w-6 h-6 bg-red-600/20 text-red-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0">1</span>
-          <p class="text-xs text-slate-200 mt-0.5 leading-relaxed">
-            <span class="font-bold text-red-400">ปัดแอปทิ้ง:</span> ให้กดหน้าโฮมและ <span class="font-bold underline">ปัดปิดแอปนี้ทิ้งทันที</span> จากหน้าต่างแอปล่าสุด (Recent Apps/Swipe Quit)
-          </p>
-        </div>
-        <div class="flex gap-3">
-          <span class="w-6 h-6 bg-emerald-600/20 text-emerald-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0">2</span>
-          <p class="text-xs text-slate-200 mt-0.5 leading-relaxed">
-            <span class="font-bold text-emerald-400">ล็อกหน้าจอ:</span> กด Power ปิดจอ iPad/โทรศัพท์ของท่านเพื่อรอนอกแอป
-          </p>
-        </div>
-        <div class="flex gap-3">
-          <span class="w-6 h-6 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0">3</span>
-          <p class="text-xs text-slate-300 mt-0.5 leading-relaxed">
-            ระบบปฏิบัติการของเครื่องจะปลุกแจ้งเตือนให้ด่วนเมื่อตัวนับเวลาเป็น 0!
-          </p>
-        </div>
+      <!-- Tab Content Area (Scrollable to prevent cutoff on small screens) -->
+      <div class="w-full overflow-y-auto flex-1 pr-1 pl-1 mb-5 custom-scrollbar space-y-4">
+        
+        <!-- COUNTDOWN TAB -->
+        @if (appKillSandboxBrand() === 'all') {
+          <div class="flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+            <!-- Countdown Circle -->
+            <div class="relative w-24 h-24 flex items-center justify-center mb-5 mt-1">
+              <div class="absolute inset-0 rounded-full border-4 border-slate-700"></div>
+              <div class="absolute inset-0 rounded-full border-4 border-indigo-500 animate-spin" style="animation-duration: 4s;"></div>
+              <span class="text-3xl font-black font-mono text-indigo-400">{{ appKillSandboxCountdown() }}</span>
+            </div>
+
+            <!-- Action items -->
+            <div class="space-y-3.5 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+              <div class="flex gap-3">
+                <span class="w-5.5 h-5.5 bg-red-600/20 text-red-400 rounded-full flex items-center justify-center font-extrabold text-[11px] shrink-0">1</span>
+                <p class="text-xs text-slate-200 leading-relaxed">
+                  <span class="font-extrabold text-red-400">ปัดแอปทิ้งทันที:</span> ให้กดยืนยันปุ่มโฮมของโทรศัพท์/iPad แล้ว <span class="font-extrabold underline text-white">ปัดแอปนี้ปิดทิ้งทันที</span> จากหน้าล่าสุด (Recent Apps Clear)
+                </p>
+              </div>
+              <div class="flex gap-3">
+                <span class="w-5.5 h-5.5 bg-emerald-600/20 text-emerald-400 rounded-full flex items-center justify-center font-extrabold text-[11px] shrink-0">2</span>
+                <p class="text-xs text-slate-200 leading-relaxed">
+                  <span class="font-extrabold text-emerald-400">ล็อกหน้าจอดับลง:</span> จากนั้นกดปิดหน้าจอดับลง เพื่อเข้าสู่สถานะหลับนอกแอป 100%
+                </p>
+              </div>
+              <div class="flex gap-3">
+                <span class="w-5.5 h-5.5 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center font-extrabold text-[11px] shrink-0">3</span>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  เมื่อระบบปฏิบัติการนับถอยหลังถึง 0 จะมีแจ้งเตือนลอยด่วนปลุกหน้าจอดังขึ้นมา ยืนยันการรอดชีวิตของคอร์แจ้งเตือนเสร็จสมบูรณ์!
+                </p>
+              </div>
+            </div>
+            
+            <p class="text-[10px] text-slate-400 mt-4 leading-normal px-2">
+              🚨 **หมายเหตุ:** หากปัดปิดแอปแล้วไม่มีสัญญานเตือนที่วินาทีท้ายๆ แปลว่ามือถือของท่านมีนโยบายประหยัดแบตเตอรี่ดุร้ายพิเศษ ให้กดเลือกแถบ **"คู่มืออนุญาตเบื้องหลังรายรุ่น"** เพื่อแก้ไข
+            </p>
+          </div>
+        } @else {
+          <!-- MANUFACTURERS TAB -->
+          <div class="flex flex-col items-center animate-in fade-in duration-200">
+            <!-- Brand Selection Pill Row -->
+            <div class="flex gap-1.5 overflow-x-auto w-full pb-3.5 mb-2- scroll-smooth shrink-0 whitespace-nowrap scrollbar-none">
+              @for (brand of ['samsung', 'xiaomi', 'oppo', 'vivo', 'huawei', 'ios', 'dev']; track brand) {
+                <button
+                  (click)="appKillSandboxBrand.set(brand)"
+                  class="px-3.5 py-1.5 rounded-xl text-[10px] font-black border uppercase tracking-tight transition-all active:scale-95 cursor-pointer"
+                  [class.bg-indigo-600]="appKillSandboxBrand() === brand"
+                  [class.border-indigo-500]="appKillSandboxBrand() === brand"
+                  [class.text-white]="appKillSandboxBrand() === brand"
+                  [class.bg-slate-900/40]="appKillSandboxBrand() !== brand"
+                  [class.border-white/10]="appKillSandboxBrand() !== brand"
+                  [class.text-slate-300]="appKillSandboxBrand() !== brand"
+                >
+                  {{ brand === 'ios' ? 'iPad/iOS' : (brand === 'dev' ? '🔧 โค้ดผู้พัฒนา' : brand) }}
+                </button>
+              }
+            </div>
+
+            <!-- Brand Targeted Instructions Cards -->
+            @switch (appKillSandboxBrand()) {
+              @case ('samsung') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">smartphone</mat-icon>
+                    <span>สําหรับแบรนด์ Samsung (OneUI)</span>
+                  </div>
+                  <div class="space-y-3 text-xs text-slate-200">
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                      <p class="leading-relaxed">ไปที่ **การตั้งค่า (Settings)** -> แตะเมนู **แอป (Apps)** -> ค้นหาแอปชื่อ **"แจ้งเตือนตารางเรียน"**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                      <p class="leading-relaxed">แตะที่ข้อความ **แบตเตอรี่ (Battery)** -> เลือกติ๊กช่อง **"ไม่จำกัด" (Unrestricted)** เพื่อป้องกัน OS ระงับการใช้กระแสไฟเบื้องหลังเมื่อปิดแอป</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                      <p class="leading-relaxed">ปิดเมนูพักแอปพลิเคชัน (ปิดหัวข้อ **พักแอปที่ไม่ได้ใช้งาน** หรือ Put unused apps to sleep)</p>
+                    </div>
+                  </div>
+                </div>
+              }
+              @case ('xiaomi') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">smartphone</mat-icon>
+                    <span>สําหรับแบรนด์ Xiaomi / Redmi / HyperOS</span>
+                  </div>
+                  <div class="space-y-3 text-xs text-slate-200">
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                      <p class="leading-relaxed">**สำคัญที่สุด:** กดค้างที่ไอคอนแอปหน้าจอหลักของท่าน -> เลือกแถบ **ข้อมูลแอป (App Info)**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                      <p class="leading-relaxed">หาแถบรุ่นประหยัดพลังงานเสริมแล้วเปิดใช้งานสวิตช์ **"เริ่มต้นอัตโนมัติ" (Autostart)** ค้างไว้เสมอ</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                      <p class="leading-relaxed">แตะที่หัวข้อ **ตัวประหยัดแบตเตอรี่ (Battery Saver)** -> ติ๊กเปลี่ยนเป็นตัวเลือก **"ไม่มีข้อจำกัด" (No restrictions)** เท่านั้น!</p>
+                    </div>
+                  </div>
+                </div>
+              }
+              @case ('oppo') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">smartphone</mat-icon>
+                    <span>สําหรับแบรนด์ OPPO / Realme (ColorOS)</span>
+                  </div>
+                  <div class="space-y-3 text-xs text-slate-200">
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                      <p class="leading-relaxed">กดแช่รูปแอปตารางเรียนที่จอแรก -> เข้าสู่ **ข้อมูลแอป (App Info)** -> เข้าหัวข้อ **การใช้แบตเตอรี่ (Battery usage)**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                      <p class="leading-relaxed">เปิดสวิตช์หัวข้อ **"อนุญาตให้ทำงานในเบื้องหลัง" (Allow background activity)**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                      <p class="leading-relaxed">เปิดสวิตช์หัวข้อ **"อนุญาตให้เปิดใช้โดยอัตโนมัติ" (Allow auto-launch)**</p>
+                    </div>
+                  </div>
+                </div>
+              }
+              @case ('vivo') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">smartphone</mat-icon>
+                    <span>สําหรับแบรนด์ Vivo / iQOO (FuntouchOS)</span>
+                  </div>
+                  <div class="space-y-3 text-xs text-slate-200">
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                      <p class="leading-relaxed">เข้าไปที่หน้า **การตั้งค่า (Settings)** -> เลือกหัวข้อ **แบตเตอรี่ (Battery)**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                      <p class="leading-relaxed">แตะข้อความเมนูย่อย **"การสิ้นเปลืองพลังงานเบื้องหลังสูง" (High background power consumption)**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                      <p class="leading-relaxed">หาชื่อแอปตารางเรียนแล้วเปิดสลับสวิตช์เป็น **"อนุญาต" (Allow)** เพื่อเปิดทางให้ระบบปล่อยสัญญาณเตือนด่วน</p>
+                    </div>
+                  </div>
+                </div>
+              }
+              @case ('huawei') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">smartphone</mat-icon>
+                    <span>สําหรับแบรนด์ Huawei (HarmonyOS / EMUI)</span>
+                  </div>
+                  <div class="space-y-3 text-xs text-slate-200">
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                      <p class="leading-relaxed">เข้าไปที่แอปพลิเคชันระบบพิมพ์บุกเบิกชื่อ **Optimizer (ตัวเพิ่มประสิทธิภาพ)** -> หัวข้อ **App Launch (การเปิดตัวแอป)**</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                      <p class="leading-relaxed">มองหาชื่อแอป **"แจ้งเตือนตารางเรียน"** แล้วทำการ **ปิด**สวิตช์ควบคุมหลักที่ชื่อ "จัดการโดยอัตโนมัติ" (Manage automatically)</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                      <p class="leading-relaxed">เมื่อมีกล่องข้อความยืนยันลอยขึ้นมา ให้ทำเครื่องหมาย **เปิด** ทั้ง 3 ข้อความย่อย ประกอบไปด้วย **เปิดใช้งานอัตโนมัติ (Auto-launch)**, **การเปิดตัวสำรอง (Secondary launch)** และ **ทำงานในเบื้องหลัง (Run in background)** แล้วกดตกลง</p>
+                    </div>
+                  </div>
+                </div>
+              }
+              @case ('ios') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">devices</mat-icon>
+                    <span>สําหรับ Apple iPadOS / iOS (iPad และ iPhone)</span>
+                  </div>
+                  <div class="space-y-3 text-xs text-slate-200">
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                      <p class="leading-relaxed">เข้าไปที่เมนูใหญ่ทางระบบ **การตั้งค่า (Settings)** -> เลื่อนดูหัวข้อล่างสุด ค้นหาและแตะที่ชื่อแอปนี้</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                      <p class="leading-relaxed">ตรวจสอบให้มั่นใจว่าได้อนุญาตการแจ้งเตือนสิทธิ์ด่วนพิเศษอันได้แก่ **"เวลาที่ละเอียดอ่อน" (Time Sensitive Alerts)** พร้อมเปิดเสียงและแบนเนอร์ครบ</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-5 h-5 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                      <p class="leading-relaxed">เปิดการใช้งานฟังก์ชันสวิตช์หลัก **"ดึงข้อมูลใหม่ในเบื้องหลัง" (Background App Refresh)** ตลอดเวลา เพื่อรักษาชีวิตวิชวลตารางสอบ</p>
+                    </div>
+                  </div>
+                </div>
+              }
+              @case ('dev') {
+                <div class="space-y-4 text-left bg-slate-900/60 p-5 rounded-2xl border border-white/5 w-full">
+                  <div class="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-2">
+                    <mat-icon class="!w-4 !h-4 !text-[16px]">code</mat-icon>
+                    <span>การยืนยัน Manifest ฝั่ง Native ในโปรเจกต์ Android Studio</span>
+                  </div>
+                  <p class="text-[11px] text-slate-300 leading-relaxed mb-1">
+                    หากคุณกำลังนำหน้าเว็บตารางเรียนนี้ไปบิวด์แพ็กเกจส่งสโตร์ด้วยตนเองและต้องการแก้ปัญหาอย่างถาวรใน Android 13/14+ ให้ตรวจสอบว่าไฟล์หลัก `AndroidManifest.xml` มีการประกาศสิทธิ์ exact schedule ครบถ้วนแล้วหรือไม่ตามรายละเอียดโค้ดด้านล่าง:
+                  </p>
+                  <div class="bg-slate-950/80 p-3.5 rounded-xl border border-white/5 font-mono text-[9px] overflow-x-auto select-all leading-normal text-teal-300 space-y-1">
+                    <div>&lt;!-- ในที่เก็บไฟล์ android/app/src/main/AndroidManifest.xml --&gt;</div>
+                    <div>&lt;uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" /&gt;</div>
+                    <div>&lt;uses-permission android:name="android.permission.USE_EXACT_ALARM" /&gt;</div>
+                    <div>&lt;uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" /&gt;</div>
+                    <div>&lt;uses-permission android:name="android.permission.WAKE_LOCK" /&gt;</div>
+                  </div>
+                  <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-500/10 text-[10px] text-slate-300 leading-normal flex gap-2">
+                    <mat-icon class="text-indigo-400 shrink-0 !w-4 !h-4 !text-[16px]">lightbulb</mat-icon>
+                    <span>**แนะนำพิเศษ:** หากประกาศ `USE_EXACT_ALARM` ใน Android 14+ จะเสถียรยิ่งขึ้นโดยไม่จำเป็นต้องเข้าไปกดอนุญาตในการตั้งค่าทีหลัง</span>
+                  </div>
+                  <div class="p-3 bg-amber-950/30 rounded-xl border border-amber-500/10 text-[10px] text-slate-300 leading-normal flex gap-2">
+                    <mat-icon class="text-amber-400 shrink-0 !w-4 !h-4 !text-[16px]">warning</mat-icon>
+                    <span>**ข้อพึงระวังเกี่ยวกับเสียงและไอคอน:** คุณมีการประกาศ `beep.wav` และ `ic_stat_icon_config_sample` ไว้ใน `capacitor.config.ts` โปรดตรวจสอบให้แน่ใจว่าไฟล์เหล่านี้มีตัวตนจริงใน Android Resource Directories (`res/raw/` และ `res/drawable/`) เพื่อหลีกเลี่ยงไม่ให้ Android ปัดเศษการส่งแจ้งเตือนเนื่องจากค้นหาทรัพยากรรูปภาพ/เสียงไม่พบ</span>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        }
       </div>
 
-      <div class="flex gap-3 w-full">
+      <div class="flex gap-3 w-full shrink-0">
         <button
           (click)="cancelAppKillSandbox()"
-          class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 px-5 rounded-xl text-xs active:scale-95 transition-all outline-none"
+          class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3.5 px-5 rounded-2xl text-xs active:scale-95 transition-all outline-none border border-white/5"
         >
-          ยกเลิกทดสอบ
+          ปิดหน้าต่างทดสอบ
         </button>
       </div>
     </div>

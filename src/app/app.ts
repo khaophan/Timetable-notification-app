@@ -9,6 +9,7 @@ import { ClassSession, AppSettings } from './models';
 import { CalendarDay, CalendarMonth, THAI_MONTHS, PUBLIC_HOLIDAYS_2026 } from './calendar';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { environment } from '../environments/environment';
 
 interface BackupData {
@@ -33,7 +34,7 @@ export class App implements OnInit {
   store = inject(AppStore);
   gemini = inject(GeminiService);
   notification = inject(NotificationService);
-  notificationPermission = signal<NotificationPermission | 'unsupported'>('default');
+  notificationPermission = signal<string>('default');
 
   activeTab = signal<'home' | 'schedule' | 'calendar' | 'settings' | 'debug'>('home');
   isProcessing = signal(false);
@@ -68,6 +69,7 @@ export class App implements OnInit {
   isCheckingUpdate = signal(false);
   appKillSandboxCountdown = signal<number>(0);
   appKillSandboxActive = signal<boolean>(false);
+  appKillSandboxBrand = signal<string>('all');
   appKillSandboxTimerId: ReturnType<typeof setInterval> | null = null;
   isInIframe = signal(typeof window !== 'undefined' && window.self !== window.top);
   isInAppBrowser = signal(false);
@@ -734,13 +736,9 @@ export class App implements OnInit {
     this.notification.startChecking();
     this.checkCloudBackupOnBoot();
     
-    if (typeof window !== 'undefined') {
-      if ('Notification' in window) {
-        this.notificationPermission.set(Notification.permission);
-      } else {
-        this.notificationPermission.set('unsupported');
-      }
+    await this.updateNotificationPermissionStatus();
 
+    if (typeof window !== 'undefined') {
       // Check Service Worker Updates
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration().then((reg) => {
@@ -921,16 +919,59 @@ export class App implements OnInit {
     this.store.updateSettings({ [key]: value });
   }
 
+  async updateNotificationPermissionStatus() {
+    if (typeof window !== 'undefined') {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { display } = await LocalNotifications.checkPermissions();
+          this.notificationPermission.set(display);
+        } catch (err) {
+          console.error('Error checking native permissions:', err);
+          this.notificationPermission.set('default');
+        }
+      } else if ('Notification' in window) {
+        this.notificationPermission.set(Notification.permission);
+      } else {
+        this.notificationPermission.set('unsupported');
+      }
+    }
+  }
+
   async requestNotificationPermission() {
-    const granted = await this.notification.requestPermission();
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      this.notificationPermission.set(Notification.permission);
+    this.isProcessing.set(true);
+    try {
+      const granted = await this.notification.requestPermission();
+      await this.updateNotificationPermissionStatus();
+      
+      if (granted || this.notificationPermission() === 'granted') {
+        this.store.activeNotification.set({
+          title: 'สำเร็จ!',
+          body: 'อนุญาตการแจ้งเตือนสิทธิ์เรียบร้อยแล้ว ระบบตารางเรียนจะแจ้งเตือนเมื่อเริ่มคาบเรียน',
+          type: 'start'
+        });
+      } else {
+        this.store.activeNotification.set({
+          title: 'สิทธิ์ถูกปฏิเสธ',
+          body: 'การแจ้งเตือนถูกบล็อก กรุณาตั้งค่าคู่มืออนุญาตทำงานเบื้องหลังหรือตรวจสอบความช่วยเหลือ',
+          type: 'end'
+        });
+      }
+    } catch (err) {
+      console.error('Error requesting notification permission:', err);
+    } finally {
+      this.isProcessing.set(false);
     }
-    if (granted) {
-      alert('อนุญาตการแจ้งเตือนเรียบร้อยแล้ว');
-    } else {
-      alert('การแจ้งเตือนถูกปฏิเสธ หากต้องการเปิดกรุณาตั้งค่าในเบราว์เซอร์');
-    }
+  }
+
+  handleDeniedPermissionClick() {
+    this.appKillSandboxActive.set(true);
+    this.appKillSandboxBrand.set('samsung'); // Opens the "คู่มืออนุญาตเบื้องหลังรายรุ่น"
+    
+    this.store.activeNotification.set({
+      title: 'สิทธิ์ถูกบล็อก/ระงับ',
+      body: 'โปรดตั้งค่าอนุญาตแจ้งเตือนในการตั้งค่าตัวเครื่อง (App Info) พร้อมปลดขีดจำกัดแบตเตอรี่เบื้องหลัง',
+      type: 'end'
+    });
   }
 
   hasDisplayableHistory(logs: { state: string }[]) {
