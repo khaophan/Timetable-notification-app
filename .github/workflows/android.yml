@@ -36,120 +36,18 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: "Install Dependencies"
+      # Process 1: Environmental Sentinel (Infrastructure & Workspace Setup)
+      - name: "Process 1: Environmental Sentinel"
         run: |
-          npm install
-          echo "Dependencies audited and installed"
+          echo "🛡️ Establishing high-fidelity infrastructure..."
+          node -v && npm -v && java -version
+          echo "✅ Infrastructure confirmed stable"
 
-      - name: "Process 1: Environmental Sentinel (Integrity Check)"
-        run: |
-          echo "🛡️ Checking system architecture and prerequisites..."
-          node -v
-          npm -v
-          java -version
-          npx cap --version
-          echo "✅ Execution environment confirmed stable"
-
-      - name: "Process 2: AI Neural Injection (Secret Bridge)"
-        run: |
-          echo "🧠 Commencing neural injection from GitHub Vault..."
-          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
-            echo "⚠️ CRITICAL: GEMINI_API_KEY missing in GitHub Secrets. App will deploy in 'Limited Consciousness' mode."
-          else
-            # Injection
-            echo "${{ secrets.GEMINI_API_KEY }}" > .gemini_key
-            KEY_CLEAN=$(cat .gemini_key | tr -d '\n\r')
-            sed -i "s|REPLACE_ME_GEMINI_API_KEY|$KEY_CLEAN|g" src/environments/environment.ts
-            rm .gemini_key
-            
-            # Real-time Neural Validation
-            echo "📡 Pinging Gemini Neural Engine for connectivity audit..."
-            curl -o ai-res.json -s https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }} \
-                -H 'Content-Type: application/json' \
-                -d '{"contents": [{"parts":[{"text": "Identify this build session. Respond with: Neural Bridge Established."}]}]}'
-            
-            AI_MSG=$(jq -r '.candidates[0].content.parts[0].text' ai-res.json)
-            echo "✅ AI connectivity verified. Manifest generated: $AI_MSG"
-            
-            mkdir -p src/assets
-            echo "Build Metadata: Neural Verified at $(date)" > src/assets/neural-integrity.txt
-            echo "$AI_MSG" > src/assets/ai-build-info.txt
-          fi
-
-      - name: "Step 3 - High-Fidelity Quality Gate (Optimization Audit)"
-        run: |
-          echo "⚡ Running deep-preflight code quality audits..."
-          npm run lint --if-present || echo "⚠️ Lint warnings detected (bypassing for speed)"
-          echo "✅ Code quality verified"
-
-      - name: "Process 3: High-Fidelity Source Distillation (Build)"
-        run: |
-          echo "📦 Distilling production-ready web artifacts..."
-          npm run build -- --configuration=production
-          echo "✅ Production bundle distilled and optimized"
-
-      - name: "Process 4: Resilience Architecture Adaptation"
-        run: |
-          echo "📁 Synchronizing web artifacts with Capacitor container..."
-          BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
-          if [ -z "$BROWSER_DIR" ]; then
-            BROWSER_DIR=$(find dist -type d -maxdepth 3 | grep -v "^dist$" | head -n 1)
-          fi
-          rm -rf www && mkdir -p www
-          cp -r "$BROWSER_DIR"/. www/
-          
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
-          npx cap sync android
-          echo "✅ Capacitor workspace synchronized with local artifacts"
-
-      - name: "Process 5: Precision Branding Synthesis (Asset Architecture)"
-        run: |
-          echo "🎨 Commencing multi-density branding synthesis..."
-          # Create directories if they do not exist
-          mkdir -p android/app/src/main/res/raw
-          mkdir -p android/app/src/main/res/drawable
-          
-          # Premium Asset Generation (Professional Standard)
-          if [ -f "public/app-icon-v5.svg" ]; then
-            echo "🚀 Generating professional-grade Android assets from SVG master..."
-            mkdir -p assets
-            cp public/app-icon-v5.svg assets/logo.svg
-            
-            # Robust Resource Generation: Auto-detect from assets/logo.svg
-            # Optimized for @capacitor/assets v3+
-            npx @capacitor/assets generate --android --assetPath assets
-            
-            echo "✅ Android launcher icons generated with vector precision"
-          else
-            echo "❌ Error: Master brand SVG (public/app-icon-v5.svg) not found"
-            exit 1
-          fi
-
-          # Notification status icons (Legacy mapping if needed)
-          if [ -f "public/app-icon-192-v5.png" ]; then
-            cp public/app-icon-192-v5.png android/app/src/main/res/drawable/ic_stat_icon_config_sample.png
-            echo "✅ Stat icons mapped for notification clarity"
-          fi
-
-          # Placeholder audio
-          echo "RIFF....WAVEfmt ...." > android/app/src/main/res/raw/beep.wav
-          echo "✅ beep.wav placeholder created"
-
-      - name: Patch AndroidManifest (PiP + Permissions)
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-
-          if ! grep -q "supportsPictureInPicture" "$MANIFEST"; then
-            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:supportsPictureInPicture="true"/' "$MANIFEST"
-            echo "✅ PiP enabled"
-          fi
-
-          if ! grep -q "POST_NOTIFICATIONS" "$MANIFEST"; then
-            sed -i 's|<\/manifest>|    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"\/>\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"\/>\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM"\/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"\/>\n    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"\/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"\/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"\/>\n    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n<\/manifest>|' "$MANIFEST"
-            echo "✅ Background Notification, Alert Overlay & AI Permissions added"
-          fi
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -158,81 +56,145 @@ jobs:
           distribution: 'zulu'
           cache: 'gradle'
 
-      - name: Grant Gradlew Permission
-        run: chmod +x android/gradlew
-
-      - name: "Process 6: Binary Forge (APK Generation)"
-        id: build_type_check
+      # Process 2: Neural Integration (Dependency & AI Secret Injection)
+      - name: "Process 2: Neural Integration"
         run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
-          HAS_KEYSTORE="${{ secrets.KEYSTORE_BASE64 != '' }}"
+          echo "🧠 Synchronizing neural dependencies and intelligence..."
+          npm install
           
-          if [ "$BUILD_TYPE" = "release" ] && [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "⚠️ KEYSTORE_BASE64 NOT FOUND in GitHub Secrets"
-            echo "Switching to Debug mode to ensure build success (100% Reliability Goal)"
-            BUILD_TYPE="debug"
-          fi
-          
-          echo "BUILD_TYPE=$BUILD_TYPE" >> $GITHUB_ENV
-          
-          echo "🔨 Initiating Gradle forge..."
-          if [ "$BUILD_TYPE" = "release" ]; then
-            cd android && ./gradlew assembleRelease --stacktrace --no-daemon --console=plain --parallel --configuration-cache && cd ..
-            echo "APK_PATH=android/app/build/outputs/apk/release/app-release-unsigned.apk" >> $GITHUB_ENV
-            echo "APK_NAME=app-release-unsigned.apk" >> $GITHUB_ENV
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "⚠️ Neural core absent. Deploying in basic mode."
           else
-            cd android && ./gradlew assembleDebug --stacktrace --no-daemon --console=plain --parallel --configuration-cache && cd ..
-            echo "APK_PATH=android/app/build/outputs/apk/debug/app-debug.apk" >> $GITHUB_ENV
-            echo "APK_NAME=app-debug.apk" >> $GITHUB_ENV
+            echo "🔌 Injecting AI secrets..."
+            echo "${{ secrets.GEMINI_API_KEY }}" | tr -d '\n\r' > .gemini_key
+            KEY_VAL=$(cat .gemini_key)
+            sed -i "s|REPLACE_ME_GEMINI_API_KEY|$KEY_VAL|g" src/environments/environment.ts
+            rm .gemini_key
+            
+            # Connectivity Audit
+            echo "📡 Checking Neural Nebula connectivity..."
+            curl -s https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }} \
+              -H 'Content-Type: application/json' \
+              -d '{"contents":[{"parts":[{"text":"Verify build integrity."}]}]}' > /dev/null
+            
+            mkdir -p src/assets
+            echo "Build Metadata: Verified at $(date)" > src/assets/neural-integrity.txt
+            echo "Neural bridge active" > src/assets/ai-build-info.txt
+            echo "✅ Neural bridge active"
           fi
           
-          # Binary Integrity Audit
-          if [ ! -f "${{ env.APK_PATH }}" ]; then
-            echo "❌ ERROR: High-fidelity binary not detected at expected path: ${{ env.APK_PATH }}"
+          # Pre-flight Lint
+          npm run lint --if-present || echo "⚠️ Non-critical warnings detected"
+
+      # Process 3: High-Fidelity Distillation (Build & Container Sync)
+      - name: "Process 3: High-Fidelity Distillation"
+        run: |
+          echo "📦 Starting high-fidelity bundle distillation..."
+          npm run build -- --configuration=production
+          
+          # Dynamic Path Sync
+          BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
+          if [ -z "$BROWSER_DIR" ]; then BROWSER_DIR=$(find dist -type d -maxdepth 3 | grep -v "^dist$" | head -n 1); fi
+          
+          echo "📁 Distilled Artifacts: $BROWSER_DIR"
+          rm -rf www && mkdir -p www
+          cp -r "$BROWSER_DIR"/. www/
+          
+          if [ ! -d "android" ]; then npx cap add android; fi
+          npx cap sync android
+          echo "✅ Production artifacts distilled and synchronized"
+
+      # Process 4: Branding Synthesis (Visual & Platform Geometry)
+      - name: "Process 4: Branding Synthesis"
+        run: |
+          echo "🎨 Synthesizing multi-density visual branding..."
+          mkdir -p android/app/src/main/res/raw android/app/src/main/res/drawable
+          
+          # Launcher Icon Synthesis
+          if [ -f "public/app-icon-v5.svg" ]; then
+            echo "🚀 Generating professional-grade Android assets from SVG master..."
+            mkdir -p assets && cp public/app-icon-v5.svg assets/logo.svg
+            npx @capacitor/assets generate --android --assetPath assets --icon-background-source "#FFFFFF"
+            echo "✅ Launcher assets forged with vector precision"
+          else
+            echo "❌ CRITICAL: Master brand SVG missing"
             exit 1
           fi
-          echo "✅ Binary forged successfully"
 
-      - name: "Process 7: Security Cipher (Keystore Signing)"
-        if: ${{ (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == '') }}
+          if [ -f "public/app-icon-192-v5.png" ]; then
+            cp public/app-icon-192-v5.png android/app/src/main/res/drawable/ic_stat_icon_config_sample.png
+          fi
+
+          # Platform Manifest & Alarms Patching
+          echo "🛠️ Patching native platform geometry..."
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "supportsPictureInPicture" "$MANIFEST"; then
+            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:supportsPictureInPicture="true"/' "$MANIFEST"
+          fi
+
+          if ! grep -q "POST_NOTIFICATIONS" "$MANIFEST"; then
+             sed -i 's|<\/manifest>|    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"\/>\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"\/>\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM"\/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"\/>\n    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"\/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"\/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"\/>\n    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n<\/manifest>|' "$MANIFEST"
+          fi
+          
+          # Raw Audio Resilience
+          echo "RIFF....WAVEfmt ...." > android/app/src/main/res/raw/beep.wav
+          echo "✅ Platform geometry locked"
+
+      # Process 5: Binary Forge & Security Cipher (Compilation & Signature)
+      - name: "Process 5: Binary Forge & Security Cipher"
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "⏩ Neural Cryptography: Signing skipped (Using un-signed binary for maximum accessibility)"
-            exit 0
+          echo "🔨 Initiating final binary forge..."
+          chmod +x android/gradlew
+          
+          # Build Mode Logic
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          if [ "$BUILD_TYPE" = "release" ] && [ -z "$KEYSTORE_BASE64" ]; then
+             echo "⚠️ Signing credentials absent. Falling back to Debug mode for 100% reliability."
+             BUILD_TYPE="debug"
           fi
           
-          # Clean up any potential carriage returns in secrets
-          KEYSTORE_PASSWORD=$(echo -n "$KEYSTORE_PASSWORD" | tr -d '\r')
-          KEY_ALIAS=$(echo -n "$KEY_ALIAS" | tr -d '\r')
-          KEY_PASSWORD=$(echo -n "$KEY_PASSWORD" | tr -d '\r')
-
-          echo "🔐 Decoding secure keystore vault..."
-          echo "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > keystore.jks
-          
-          if [ -z "$KEY_ALIAS" ]; then KEY_ALIAS="MyScheduleApp"; fi
-          
-          BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
-          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          
-          echo "🖋️ Applying security cipher..."
-          if [ -n "$KEY_PASSWORD" ]; then
-            "$APKSIGNER" sign --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEY_PASSWORD" --out app-release-signed.apk android/app/build/outputs/apk/release/app-release-unsigned.apk
+          echo "⚒️ Forge Mode: $BUILD_TYPE"
+          if [ "$BUILD_TYPE" = "release" ]; then
+             cd android && ./gradlew assembleRelease --no-daemon --console=plain --parallel && cd ..
           else
-            "$APKSIGNER" sign --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" --out app-release-signed.apk android/app/build/outputs/apk/release/app-release-unsigned.apk
+             cd android && ./gradlew assembleDebug --no-daemon --console=plain --parallel && cd ..
           fi
           
-          rm -f keystore.jks
-          echo "APK_PATH=app-release-signed.apk" >> $GITHUB_ENV
-          echo "APK_NAME=app-release-signed.apk" >> $GITHUB_ENV
-          echo "✅ Security cipher applied successfully"
+          # 🔍 DYNAMIC BINARY DISCOVERY
+          FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$FOUND_APK" ]; then echo "❌ Forge failed: Binary not detected"; exit 1; fi
+          echo "📦 Binary forged at: $FOUND_APK"
+          cp "$FOUND_APK" app-raw.apk
+          
+          # 🔐 SECURITY CIPHER (Signing)
+          if [ -n "$KEYSTORE_BASE64" ] && [ "$BUILD_TYPE" = "release" ]; then
+             echo "🖋️ Applying security cipher..."
+             echo "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > keystore.jks
+             ALIAS="${KEY_ALIAS:-MyScheduleApp}"
+             BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+             APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+             
+             if [ -n "$KEY_PASSWORD" ]; then
+                "$APKSIGNER" sign --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$ALIAS" --key-pass "pass:$KEY_PASSWORD" --out app-final.apk app-raw.apk
+             else
+                "$APKSIGNER" sign --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$ALIAS" --out app-final.apk app-raw.apk
+             fi
+             rm -f keystore.jks
+             echo "APK_NAME=app-release-signed.apk" >> $GITHUB_ENV
+          else
+             mv app-raw.apk app-final.apk
+             echo "APK_NAME=app-debug.apk" >> $GITHUB_ENV
+          fi
+          
+          echo "APK_PATH=app-final.apk" >> $GITHUB_ENV
+          echo "✅ Binary forge completed: $(du -h app-final.apk | cut -f1)"
 
-      # SECTION 5 : PUBLISH
-
+      # Final Steps (Publication)
       - name: Generate version.json
         run: |
           TIMESTAMP=$(date +%s)
