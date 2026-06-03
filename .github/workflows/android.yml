@@ -25,9 +25,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ════════════════════════════════════════════════════════
       # SECTION 1 : SETUP
-      # ════════════════════════════════════════════════════════
 
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,52 +36,46 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: "Install Dependencies"
         run: |
           npm install
-          echo "✅ Dependencies audited and installed"
+          echo "Dependencies audited and installed"
 
-      # ════════════════════════════════════════════════════════
-      # SECTION 2 : TIGHTENING & AI INJECTION (5 ADVANCED STEPS)
-      # ════════════════════════════════════════════════════════
-
-      - name: Step 1: Environment Integrity Check
+      - name: "Step 1 - Environment Integrity Check"
         run: |
-          echo "🔍 Verifying System Environment..."
+          echo "Verifying System Environment..."
           node -v
           npm -v
           java -version
           npx cap --version
-          echo "✅ Environment verified"
+          echo "Environment verified"
 
-      - name: Step 2: Inject AI API Secret (GitHub Context)
+      - name: "Step 2 - Inject AI API Secret"
         run: |
-          echo "🔑 Injecting AI API Secret into application environment..."
+          echo "Injecting AI API Secret into application environment..."
           if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
-            echo "⚠️  WARNING: GEMINI_API_KEY secret is missing from GitHub Settings. AI features will fallback to backend."
+            echo "WARNING: GEMINI_API_KEY secret is missing from GitHub Settings. AI features will fallback to backend."
           else
-            # We use a temp file to avoid sed issues with special characters in API keys
             echo "${{ secrets.GEMINI_API_KEY }}" > .gemini_key
             KEY_CLEAN=$(cat .gemini_key | tr -d '\n\r')
             sed -i "s|REPLACE_ME_GEMINI_API_KEY|$KEY_CLEAN|g" src/environments/environment.ts
             rm .gemini_key
-            echo "✅ AI API Key successfully embedded into build artifacts"
+            echo "AI API Key successfully embedded into build artifacts"
           fi
 
-      - name: Step 3: Source Code Lint & Pre-flight
+      - name: "Step 3 - Source Code Lint and Pre-flight"
         run: |
-          echo "⚡ Running Pre-flight checks..."
-          npm run lint || echo "⚠️ Lint warnings detected (continuing build)"
-          echo "✅ Pre-flight completed"
+          echo "Running Pre-flight checks..."
+          npm run lint || echo "Lint warnings detected (continuing build)"
+          echo "Pre-flight completed"
 
       # ════════════════════════════════════════════════════════
       # SECTION 3 : BUILD
-      # ════════════════════════════════════════════════════════
 
-      - name: Build Angular App (Production)
+      - name: "Step 4 - Angular Production Build"
         run: npm run build -- --configuration=production
 
-      - name: Prepare www/ for Capacitor
+      - name: "Prepare www/ for Capacitor"
         run: |
           BROWSER_DIR=$(find dist -name "browser" -type d | head -n 1)
           if [ -z "$BROWSER_DIR" ]; then
@@ -94,9 +86,7 @@ jobs:
           cp -r "$BROWSER_DIR"/. www/
           echo "✅ www/ ready"
 
-      # ════════════════════════════════════════════════════════
       # SECTION 4 : CAPACITOR + ANDROID
-      # ════════════════════════════════════════════════════════
 
       - name: Capacitor Sync Android
         run: |
@@ -105,7 +95,7 @@ jobs:
           fi
           npx cap sync android
 
-      - name: Prepare Android Resources (Alarms, Sounds and Icons)
+      - name: "Step 5 - Advanced Asset Generation"
         run: |
           # Create directories if they do not exist
           mkdir -p android/app/src/main/res/raw
@@ -243,9 +233,7 @@ jobs:
           echo "APK_NAME=app-release-signed.apk" >> $GITHUB_ENV
           echo "✅ APK signed"
 
-      # ════════════════════════════════════════════════════════
       # SECTION 5 : PUBLISH
-      # ════════════════════════════════════════════════════════
 
       - name: Generate version.json
         run: |
