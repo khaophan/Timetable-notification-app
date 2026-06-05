@@ -121,10 +121,14 @@ export class GeminiService {
     } catch (error: unknown) {
       console.error('Error parsing schedule via backend API:', error);
       
-      const err = error as { message?: string; error?: { error?: string } };
-      const errMsg = err.error?.error || err.message || String(error);
-      if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+      const err = error as { message?: string; error?: { message?: string; error?: string } };
+      const errMsg = err.error?.message || err.error?.error || err.message || String(error);
+      const lowMsg = errMsg.toLowerCase();
+      
+      if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || lowMsg.includes('quota') || lowMsg.includes('too many requests')) {
         throw new Error('ขออภัย ระบบมีการใช้งาน AI เกินโควต้าฟรีที่กำหนดชั่วคราว กรุณารอสักครู่ (ประมาณ 1 นาที) แล้วลองใหม่อีกครั้ง');
+      } else if (errMsg.includes('503') || lowMsg.includes('unavailable') || lowMsg.includes('high demand') || lowMsg.includes('spikes in demand')) {
+        throw new Error('ระบบ AI ของเซิร์ฟเวอร์มีผู้ใช้งานหนาแน่นหรือเครือข่ายขัดข้องชั่วคราว กรุณากดลองใหม่อีกครั้งเพื่อส่งวิเคราะห์ตารางเรียน');
       } else {
         throw new Error(`เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ AI: ${errMsg}`);
       }

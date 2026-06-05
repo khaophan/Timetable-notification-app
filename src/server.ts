@@ -39,9 +39,9 @@ app.post('/api/gemini/parse', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey: key });
     
-    // Add simple retry logic for 429 Too Many Requests
+    // Add simple retry logic for 429 Too Many Requests & 503 Service Unavailable / High Demand
     let response;
-    let retries = 2;
+    let retries = 3; // Increase retries to 3
     while (retries >= 0) {
       try {
         response = await ai.models.generateContent({
@@ -88,12 +88,22 @@ app.post('/api/gemini/parse', async (req, res) => {
         });
         break; // Sucess, break out of retry loop
       } catch (err: unknown) {
-        const errorObject = err as { status?: number; message?: string };
-        if (retries === 0 || errorObject.status !== 429) {
+        const errorObject = err as { status?: number; message?: string; name?: string; code?: number };
+        const status = errorObject.status || errorObject.code || 0;
+        const msg = errorObject.message || '';
+        const isRetryable = status === 429 || status === 503 ||
+                            msg.includes('429') ||
+                            msg.includes('503') ||
+                            msg.toLowerCase().includes('rate limit') ||
+                            msg.toLowerCase().includes('high demand') ||
+                            msg.toLowerCase().includes('unavailable') ||
+                            msg.toLowerCase().includes('spikes in demand');
+        
+        if (retries === 0 || !isRetryable) {
           throw err;
         }
-        console.warn(`[Gemini API] Rate limited. Retrying... (${retries} attempts left)`);
-        await new Promise(r => setTimeout(r, 2000)); // wait 2 seconds before retry
+        console.warn(`[Gemini API] Temporary error (status: ${status}, message: ${msg}). Retrying in 2.5 seconds... (${retries} attempts left)`);
+        await new Promise(r => setTimeout(r, 2500)); // wait 2.5 seconds before retry
         retries--;
       }
     }
@@ -112,13 +122,20 @@ app.post('/api/gemini/parse', async (req, res) => {
     const parsed = JSON.parse(text);
     res.json(parsed);
   } catch (error: unknown) {
-    const err = error as { status?: number; message?: string };
-    if (err?.status === 429) {
+    const err = error as { status?: number; message?: string; code?: number; error?: { message?: string } };
+    const status = err.status || err.code || 500;
+    const msg = err.message || (err.error && typeof err.error === 'object' ? err.error.message : '') || String(error);
+    const lowMsg = msg.toLowerCase();
+    
+    if (status === 429 || lowMsg.includes('429') || lowMsg.includes('quota') || lowMsg.includes('resource_exhausted') || lowMsg.includes('too many requests')) {
       console.error('[Gemini API] Failed to parse: Quota exceeded (429).');
-      res.status(429).json({ error: 'RESOURCE_EXHAUSTED', message: err.message || String(error) });
+      res.status(429).json({ error: 'RESOURCE_EXHAUSTED', message: 'ขออภัย ระบบมีการใช้งาน AI เกินโควต้าชั่วคราว กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้ง' });
+    } else if (status === 503 || lowMsg.includes('503') || lowMsg.includes('unavailable') || lowMsg.includes('high demand') || lowMsg.includes('spikes in demand')) {
+      console.error('[Gemini API] Failed to parse: Service unavailable (503).');
+      res.status(503).json({ error: 'UNAVAILABLE', message: 'ระบบ AI ของเซิร์ฟเวอร์มีผู้ใช้งานหนาแน่นหรือเกิดปัญหาการเชื่อมต่อชั่วคราวชั่วครู่ กรุณากดลองใหม่อีกครั้งเพื่อส่งคำขอประมวลผล' });
     } else {
       console.error('Error parsing schedule with Gemini:', error);
-      res.status(500).json({ error: err.message || String(error) });
+      res.status(status).json({ error: msg });
     }
   }
 });
