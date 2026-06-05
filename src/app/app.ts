@@ -20,17 +20,6 @@ interface BackupData {
   active?: boolean;
 }
 
-export interface ServerNotification {
-  id: string;
-  title: string;
-  body: string;
-  dispatchedAt: string;
-  ipAddress: string;
-  status: string;
-  subjectName?: string;
-  startTime?: string;
-}
-
 interface PwaInstallPrompt {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
@@ -48,35 +37,10 @@ export class App implements OnInit {
   gemini = inject(GeminiService);
   notification = inject(NotificationService);
   notificationPermission = signal<string>('default');
-  isNotificationSimulated = signal<boolean>(false);
-  
-  // Real-time server-side synchronization fields
-  clientIp = signal<string>('กำลังตรวจหา IP...');
-  dispatchedNotifications = signal<ServerNotification[]>([]);
 
   activeTab = signal<'home' | 'schedule' | 'calendar' | 'settings' | 'debug' | 'admin'>('home');
   isProcessing = signal(false);
   currentTime = signal<Date>(new Date());
-
-  // Optimized stable signals to prevent continuous change-detection thrashing
-  currentDateString = computed(() => {
-    const today = this.currentTime();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  });
-
-  currentDayName = computed(() => {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return days[this.currentTime().getDay()];
-  });
-
-  tomorrowDayName = computed(() => {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const tomorrow = new Date(this.currentTime().getTime() + 86400000);
-    return days[tomorrow.getDay()];
-  });
 
   // Admin Signals
   adminBackendApiUrl = signal('');
@@ -297,16 +261,6 @@ export class App implements OnInit {
         this.adminMaintenanceMode.set(!!g.maintenanceMode);
         this.adminGithubRepo.set(g.githubRepo || 'khaophan/Timetable-notification-app');
         this.adminSubjectMappings.set(g.subjectMappings || {});
-
-        // Sync regular user's local subject mappings as well
-        if (g.subjectMappings) {
-          try {
-            const currentObj = this.subjectMappings();
-            this.subjectMappings.set({ ...currentObj, ...g.subjectMappings });
-          } catch (e) {
-            console.error('Failed to sync globalConfig subjectMappings:', e);
-          }
-        }
       }
     });
 
@@ -519,9 +473,9 @@ export class App implements OnInit {
     const mapping = this.subjectMappings();
     const name = mapping[code] || session.subjectName || code || '';
     
-    const dayGroup = this.groupedSchedule().find(g => g.day === session.dayOfWeek);
-    const classes = dayGroup ? dayGroup.classes : [];
-    const isLast = classes.length > 0 && classes[classes.length - 1].id === session.id;
+    // Check if it's the last session of the day
+    const allSessionsToday = this.store.schedule().filter(s => s.dayOfWeek === session.dayOfWeek).sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const isLast = allSessionsToday.length > 0 && allSessionsToday[allSessionsToday.length - 1].id === session.id;
 
     if (isLast && (!name || name === 'โฮมรูม' || name === 'ว่าง')) {
        return 'เลิกเรียน';
@@ -532,44 +486,37 @@ export class App implements OnInit {
 
   getClassStatus(session: ClassSession): 'past' | 'current' | 'future' {
     const now = this.currentTime();
-    const currentH = now.getHours();
-    const currentM = now.getMinutes();
+    const [startH, startM] = session.startTime.split(':').map(Number);
+    const [endH, endM] = session.endTime.split(':').map(Number);
     
-    const startH = +(session.startTime.substring(0, 2));
-    const startM = +(session.startTime.substring(3, 5));
-    const endH = +(session.endTime.substring(0, 2));
-    const endM = +(session.endTime.substring(3, 5));
+    const startTime = new Date(now);
+    startTime.setHours(startH, startM, 0, 0);
     
-    const nowTime = currentH * 60 + currentM;
-    const startTime = startH * 60 + startM;
-    const endTime = endH * 60 + endM;
+    const endTime = new Date(now);
+    endTime.setHours(endH, endM, 0, 0);
 
-    if (nowTime >= endTime) return 'past';
-    if (nowTime >= startTime && nowTime < endTime) return 'current';
+    if (now > endTime) return 'past';
+    if (now >= startTime && now <= endTime) return 'current';
     return 'future';
   }
 
   getCountdown(session: ClassSession): string {
     const now = this.currentTime();
+    const [endH, endM] = session.endTime.split(':').map(Number);
+    const endTime = new Date(now);
+    endTime.setHours(endH, endM, 0, 0);
     
-    const endH = +(session.endTime.substring(0, 2));
-    const endM = +(session.endTime.substring(3, 5));
-    
-    const endSecs = (endH * 3600) + (endM * 60);
-    const nowSecs = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds();
-    
-    const diff = endSecs - nowSecs;
+    const diff = endTime.getTime() - now.getTime();
     if (diff <= 0) return '00:00';
     
-    const mins = Math.floor(diff / 60);
-    const secs = diff % 60;
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
 
   getBellTime(session: ClassSession): string {
     const preNotifyMinutes = this.preNotifyMinutes();
-    const startH = +(session.startTime.substring(0, 2));
-    const startM = +(session.startTime.substring(3, 5));
+    const [startH, startM] = session.startTime.split(':').map(Number);
     let notifyH = startH;
     let notifyM = startM - preNotifyMinutes;
     while (notifyM < 0) {
@@ -586,8 +533,7 @@ export class App implements OnInit {
     const now = this.currentTime();
     
     // Calculate bell/notification target date for today
-    const startH = +(session.startTime.substring(0, 2));
-    const startM = +(session.startTime.substring(3, 5));
+    const [startH, startM] = session.startTime.split(':').map(Number);
     const preNotifyMinutes = this.preNotifyMinutes();
     
     let notifyH = startH;
@@ -600,15 +546,14 @@ export class App implements OnInit {
       notifyH = (notifyH % 24 + 24) % 24;
     }
     
-    const targetSecs = (notifyH * 3600) + (notifyM * 60);
-    const nowSecs = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds();
+    const bellTime = new Date(now);
+    bellTime.setHours(notifyH, notifyM, 0, 0);
     
-    let diff = targetSecs - nowSecs;
+    const diff = bellTime.getTime() - now.getTime();
     if (diff <= 0) return null; // Already passed
-    if (diff > 86400) diff = diff % 86400; // safe wrap
     
-    const mins = Math.floor(diff / 60);
-    const secs = diff % 60;
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
 
@@ -719,7 +664,9 @@ export class App implements OnInit {
 
   currentDaySchedule = computed(() => {
     const list = this.store.schedule();
-    const todayStr = this.currentDayName();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const today = this.currentTime();
+    const todayStr = days[today.getDay()];
     return list.filter(c => c.dayOfWeek === todayStr).sort((a, b) => a.startTime.localeCompare(b.startTime));
   });
 
@@ -733,7 +680,9 @@ export class App implements OnInit {
 
   tomorrowDaySchedule = computed(() => {
     const list = this.store.schedule();
-    const tomorrowStr = this.tomorrowDayName();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const tomorrow = new Date(this.currentTime().getTime() + 86400000); // Add 24 hours
+    const tomorrowStr = days[tomorrow.getDay()];
     return list.filter(c => c.dayOfWeek === tomorrowStr).sort((a, b) => a.startTime.localeCompare(b.startTime));
   });
 
@@ -785,8 +734,7 @@ export class App implements OnInit {
     if (list.length === 0) return null;
 
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const todayStr = this.currentDateString();
-    const today = new Date(todayStr);
+    const today = this.currentTime();
     
     for (let i = 1; i <= 30; i++) {
       const checkDate = new Date(today);
@@ -814,12 +762,15 @@ export class App implements OnInit {
   });
 
   todayHolidayInfo = computed(() => {
-    return this.isSchoolHoliday(this.currentDateString());
+    const today = this.currentTime();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return this.isSchoolHoliday(`${yyyy}-${mm}-${dd}`);
   });
 
   tomorrowHolidayInfo = computed(() => {
-    const todayStr = this.currentDateString();
-    const today = new Date(todayStr);
+    const today = this.currentTime();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
@@ -832,10 +783,6 @@ export class App implements OnInit {
   async ngOnInit() {
     this.notification.startChecking();
     this.checkCloudBackupOnBoot();
-
-    // Fetch user IP address & subscribe to backend-dispatched background alarm triggers
-    this.fetchClientIp();
-    this.subscribeToDispatchedNotifications();
 
     onAuthStateChanged(auth, (user) => {
       this.adminUser.set(user);
@@ -1037,26 +984,18 @@ export class App implements OnInit {
 
   async updateNotificationPermissionStatus() {
     if (typeof window !== 'undefined') {
-      const isSim = localStorage.getItem('simulated_notification_permission') === 'granted';
       if (Capacitor.isNativePlatform()) {
         try {
           const { display } = await LocalNotifications.checkPermissions();
           this.notificationPermission.set(display);
-          this.isNotificationSimulated.set(false);
         } catch (err) {
           console.error('Error checking native permissions:', err);
           this.notificationPermission.set('default');
-          this.isNotificationSimulated.set(false);
         }
-      } else if (isSim) {
-        this.notificationPermission.set('granted');
-        this.isNotificationSimulated.set(!('Notification' in window) || Notification.permission !== 'granted');
       } else if ('Notification' in window) {
         this.notificationPermission.set(Notification.permission);
-        this.isNotificationSimulated.set(false);
       } else {
         this.notificationPermission.set('unsupported');
-        this.isNotificationSimulated.set(false);
       }
     }
   }
@@ -1067,22 +1006,12 @@ export class App implements OnInit {
       const granted = await this.notification.requestPermission();
       await this.updateNotificationPermissionStatus();
       
-      const isSim = this.isNotificationSimulated();
-
       if (granted || this.notificationPermission() === 'granted') {
-        if (isSim) {
-          this.store.activeNotification.set({
-            title: 'เปิดแจ้งเตือนเสมือนในแอปสำเร็จ! 🎉',
-            body: 'เนื่องจากกำลังใช้งานบน iFrame หรือ iOS Safari เบราว์เซอร์ปกติธรรมดา\nระบบจึงเปิดสิทธิ์แจ้งเตือนจำลองแอป (In-App notification) และระบบเสียง Chime เตือนอัจฉริยะให้โดยอัตโนมัติแล้ว! ระบบจะทำงานเมื่อเปิดหน้าเว็บนี้ค้างไว้',
-            type: 'start'
-          });
-        } else {
-          this.store.activeNotification.set({
-            title: 'สำเร็จ!',
-            body: 'อนุญาตการแจ้งเตือนสิทธิ์เรียบร้อยแล้ว ระบบตารางเรียนจะแจ้งเตือนเมื่อเริ่มคาบเรียน',
-            type: 'start'
-          });
-        }
+        this.store.activeNotification.set({
+          title: 'สำเร็จ!',
+          body: 'อนุญาตการแจ้งเตือนสิทธิ์เรียบร้อยแล้ว ระบบตารางเรียนจะแจ้งเตือนเมื่อเริ่มคาบเรียน',
+          type: 'start'
+        });
       } else {
         this.store.activeNotification.set({
           title: 'สิทธิ์ถูกปฏิเสธ',
@@ -1373,154 +1302,31 @@ export class App implements OnInit {
     let importedCount = 0;
     
     for (const line of lines) {
-      const cleaned = line.trim();
-      if (!cleaned) continue;
-      
-      let code = '';
-      let name = '';
-      
-      if (cleaned.includes('> |')) {
-        const parts = cleaned.split('> |');
-        code = parts[0];
-        name = parts[1];
-      } else if (cleaned.includes('=>')) {
-        const parts = cleaned.split('=>');
-        code = parts[0];
-        name = parts[1];
-      } else if (cleaned.includes('->')) {
-        const parts = cleaned.split('->');
-        code = parts[0];
-        name = parts[1];
-      } else if (cleaned.includes('=')) {
-        const parts = cleaned.split('=');
-        code = parts[0];
-        name = parts[1];
-      } else if (cleaned.includes('|')) {
-        const parts = cleaned.split('|');
-        code = parts[0];
-        name = parts[1];
-      } else if (cleaned.includes(':')) {
-        const parts = cleaned.split(':');
-        code = parts[0];
-        name = parts[1];
-      } else if (cleaned.includes(',')) {
-        const parts = cleaned.split(',');
-        code = parts[0];
-        name = parts[1];
-      } else {
-        // Try space or tab split
-        const parts = cleaned.split(/\s+/);
-        if (parts.length >= 2) {
-          code = parts[0];
-          name = parts.slice(1).join(' ');
-        }
-      }
-
-      if (code && name) {
+      if (!line.trim()) continue;
+      let matched = false;
+      if (line.includes('> |')) {
+        const [code, name] = line.split('> |');
         updated[code.trim().toUpperCase()] = name.trim();
-        importedCount++;
+        matched = true;
+      } else if (line.includes('|')) {
+        const [code, name] = line.split('|');
+        updated[code.trim().toUpperCase()] = name.trim();
+        matched = true;
+      } else if (line.includes('=')) {
+        const [code, name] = line.split('=');
+        updated[code.trim().toUpperCase()] = name.trim();
+        matched = true;
       }
+      if (matched) importedCount++;
     }
     
     if (importedCount > 0) {
       this.adminSubjectMappings.set(updated);
-      alert(`🎉 นำเข้ารายวิชาสำเร็จ ${importedCount} รายการ!\n👉 โปรดกดปุ่ม "เชื่อมต่อเซิร์ฟเวอร์เพื่อบันทึกวิชาขึ้น Cloud" ด้านล่างนี้เพื่อเปิดใช้งานตารางรายวิชานี้กับผู้ใช้งานทุกคนทั่วโลกทันที!`);
+      alert(`นำเข้ารายวิชาแอดมินสำเร็จ ${importedCount} รายการ (โปรดกดบันทึกเพื่อซิงก์ข้อมูลไปมือถือครอบคลุมทั่วโลก)`);
     } else {
-      alert('❌ ไม่พบข้อมูลรายวิชาในไฟล์นี้ กรุณาใช้รูปแบบที่ถูกต้อง เช่น โค้ดวิชา = ชื่อวิชา หรือ โค้ดวิชา : ชื่อวิชา');
+      alert('ไม่พบข้อมูลรูปแบบที่ใช้จับคู่รหัสได้ เกร็ดตัวอย่าง: ว30103 = วิทยาศาสตร์');
     }
     input.value = '';
-  }
-
-  async fetchClientIp() {
-    try {
-      const res = await fetch('/api/ip');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.ip) {
-          this.clientIp.set(data.ip);
-          return;
-        }
-      }
-      this.clientIp.set('ไม่ทราบ IP (ใช้จำลอง)');
-    } catch {
-      this.clientIp.set('127.0.0.1 (Local Environment)');
-    }
-  }
-
-  subscribeToDispatchedNotifications() {
-    if (typeof window === 'undefined') return;
-    
-    import('./firebase-client').then(({ getOrCreateUserUid, db }) => {
-      import('firebase/firestore').then(({ collection, query, orderBy, limit, onSnapshot }) => {
-        const uid = getOrCreateUserUid();
-        const q = query(
-          collection(db, `users/${uid}/dispatched_notifications`),
-          orderBy('dispatchedAt', 'desc'),
-          limit(10)
-        );
-        
-        let isFirstLoad = true;
-        
-        onSnapshot(q, (snap) => {
-          const items: ServerNotification[] = [];
-          snap.forEach(doc => {
-            const data = doc.data() as ServerNotification;
-            items.push(data);
-          });
-          
-          // Sort raw items chronologically ascending to detect sequence
-          const sortedItems = [...items].sort((a, b) => Date.parse(a.dispatchedAt) - Date.parse(b.dispatchedAt));
-          
-          if (!isFirstLoad) {
-            const currentIds = new Set(this.dispatchedNotifications().map(d => d.id));
-            const newDispatches = sortedItems.filter(item => !currentIds.has(item.id));
-            
-            if (newDispatches.length > 0) {
-              const latestDispatched = newDispatches[newDispatches.length - 1];
-              // Play high-contrast E5/B5 browser web audio chime synth immediately 
-              this.notification.playNotificationSound();
-              
-              // Set global store active notification to popup beautiful in-app notice instantly on screen
-              this.store.activeNotification.set({
-                title: latestDispatched.title,
-                body: `${latestDispatched.body}\n(ส่งเฉพาะตัวรายเครื่อง IP: ${latestDispatched.ipAddress})`,
-                type: 'start'
-              });
-            }
-          } else {
-            isFirstLoad = false;
-          }
-          
-          this.dispatchedNotifications.set(items);
-        }, (err) => {
-          console.warn('Failed to subscribe to background dispatches in app.ts:', err);
-        });
-      });
-    });
-  }
-
-  async triggerServerTestAlarm() {
-    this.isProcessing.set(true);
-    try {
-      const { getOrCreateUserUid } = await import('./firebase-client');
-      const uid = getOrCreateUserUid();
-      const res = await fetch('/api/trigger-test-alarm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid })
-      });
-      if (res.ok) {
-        console.log('Successfully requested direct server alarm trigger!');
-      } else {
-        const data = await res.json();
-        alert(`ไม่สามารถเรียกงานเซิร์ฟเวอร์ได้: ${data.error || 'ข้อผิดพลาดระบบแอน'}`);
-      }
-    } catch (e) {
-      console.error('Trigger server alarm failure:', e);
-      alert('เชื่องโยงเซิร์ฟเวอร์ Direct เหมืองล้มเหลว');
-    } finally {
-      this.isProcessing.set(false);
-    }
   }
 }
 

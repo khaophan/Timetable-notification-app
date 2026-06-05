@@ -1,29 +1,11 @@
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, enableIndexedDbPersistence, getDocFromCache, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn('Firestore persistence failed-precondition: Multiple tabs open.');
-    } else if (err.code === 'unimplemented') {
-      console.warn('Firestore persistence unimplemented in this browser.');
-    }
-  });
-
-  // Test connection to Firestore on boot as per Critical Constraint
-  getDocFromServer(doc(db, 'test', 'connection')).catch((error) => {
-    if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('offline'))) {
-      console.warn('[Firestore] Operating in offline mode. Please check your network connection.');
-    }
-  });
-}
-
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -68,83 +50,20 @@ export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
 
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  }
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
-    },
-    operationType,
-    path
-  };
-  console.error('[Firestore Error]: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
 // Global Configuration admin controls
 export const getGlobalConfig = async (): Promise<GlobalConfig | null> => {
-  const path = 'global_settings/config';
-  const docRef = doc(db, 'global_settings', 'config');
   try {
-    const snap = await getDoc(docRef);
+    const snap = await getDoc(doc(db, 'global_settings', 'config'));
     if (snap.exists()) {
       return snap.data() as GlobalConfig;
     }
   } catch (err) {
-    const errorWithCode = err as { code?: string; message?: string };
-    if (errorWithCode?.code === 'unavailable' || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      console.warn('[Firestore] getGlobalConfig: Client is offline. Fetching from cache if available...');
-      try {
-        const cacheSnap = await getDocFromCache(docRef);
-        if (cacheSnap.exists()) {
-          return cacheSnap.data() as GlobalConfig;
-        }
-      } catch (cacheErr) {
-        console.warn('[Firestore] Failed to get global configuration from cache:', cacheErr);
-      }
-    } else {
-      handleFirestoreError(err, OperationType.GET, path);
-    }
+    console.error('Failed to get global configs:', err);
   }
   return null;
 };
 
 export const saveGlobalConfig = async (newConfig: GlobalConfig): Promise<void> => {
-  const path = 'global_settings/config';
   try {
     await setDoc(doc(db, 'global_settings', 'config'), {
       ...newConfig,
@@ -152,7 +71,8 @@ export const saveGlobalConfig = async (newConfig: GlobalConfig): Promise<void> =
     });
     console.log('Global configuration updated by Admin successfully.');
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, path);
+    console.error('Failed to update global config:', err);
+    throw err;
   }
 };
 
@@ -198,36 +118,13 @@ export const backupScheduleSettings = async (schedule: unknown, settings: unknow
   if (typeof window === 'undefined') return;
   try {
     const uid = getOrCreateUserUid();
-    
-    // Fetch client IP address to associate with this backup and device identity
-    let clientIp = 'unknown';
-    try {
-      const ipRes = await fetch('/api/ip');
-      if (ipRes.ok) {
-        const ipData = await ipRes.json();
-        if (ipData && ipData.ip) {
-          clientIp = ipData.ip;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not retrieve client IP:', e);
-    }
-
-    const userRootRef = doc(db, 'users', uid);
-    await setDoc(userRootRef, {
-      updatedAt: new Date().toISOString(),
-      ipAddress: clientIp,
-      active: active
-    }, { merge: true });
-
     await setDoc(doc(db, 'users', uid, 'backup', 'data'), {
       schedule,
       settings,
       active,
-      ipAddress: clientIp,
       updatedAt: new Date().toISOString()
     });
-    console.log(`Schedule data backed up to cloud successfully for IP: ${clientIp}`);
+    console.log('Schedule data backed up to cloud successfully.');
   } catch (err) {
     console.error('Failed to backup schedule data:', err);
   }
@@ -235,30 +132,15 @@ export const backupScheduleSettings = async (schedule: unknown, settings: unknow
 
 export const restoreScheduleSettings = async () => {
   if (typeof window === 'undefined') return null;
-  const uid = getOrCreateUserUid();
-  const docRef = doc(db, 'users', uid, 'backup', 'data');
   try {
-    const snap = await getDoc(docRef);
+    const uid = getOrCreateUserUid();
+    const snap = await getDoc(doc(db, 'users', uid, 'backup', 'data'));
     if (snap.exists()) {
       console.log('Schedule data restored from cloud successfully.');
       return snap.data();
     }
   } catch (err) {
-    const errorWithCode = err as { code?: string; message?: string };
-    if (errorWithCode?.code === 'unavailable' || !navigator.onLine) {
-      console.warn('[Firestore] restoreScheduleSettings: Client is offline. Fetching from cache if available...');
-      try {
-        const cacheSnap = await getDocFromCache(docRef);
-        if (cacheSnap.exists()) {
-          console.log('Schedule data restored from local cache successfully.');
-          return cacheSnap.data();
-        }
-      } catch (cacheErr) {
-        console.warn('[Firestore] Failed to restore schedule settings from cache:', cacheErr);
-      }
-    } else {
-      console.info('[Firestore] Failed to restore schedule data (unhandled):', err);
-    }
+    console.error('Failed to restore schedule data:', err);
   }
   return null;
 };
@@ -292,20 +174,6 @@ export const requestFirebaseNotificationPermission = async () => {
       if (token) {
         console.log('FCM Token received:', token);
         const uid = getOrCreateUserUid();
-
-        // Fetch client IP address to associate with this device registration
-        let clientIp = 'unknown';
-        try {
-          const ipRes = await fetch('/api/ip');
-          if (ipRes.ok) {
-            const ipData = await ipRes.json();
-            if (ipData && ipData.ip) {
-              clientIp = ipData.ip;
-            }
-          }
-        } catch (e) {
-          console.warn('Could not retrieve client IP:', e);
-        }
         
         // 5. บันทึก Token ลง Firestore ถือว่าจัดการเชื่อมกับ user uid (เป็น anonymous uuid)
         // เพื่อให้ฝั่ง backend นำไปใช้ส่งข้อความตามเวลาได้
@@ -313,8 +181,7 @@ export const requestFirebaseNotificationPermission = async () => {
           token,
           createdAt: new Date().toISOString(),
           platform: 'web',
-          uid: uid,
-          ipAddress: clientIp
+          uid: uid
         }, { merge: true });
 
         // เก็บไว้ใน LocalStorage ว่าเคยได้ Token แล้ว
