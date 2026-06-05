@@ -11,7 +11,7 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { environment } from '../environments/environment';
-import { auth, ADMIN_EMAIL, GlobalConfig } from './firebase-client';
+import { auth, ADMIN_EMAIL, GlobalConfig, signUpWithEmail, loginWithEmail, logout } from './firebase-client';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
 interface BackupData {
@@ -54,6 +54,13 @@ export class App implements OnInit {
 
   // Authentication Signals
   adminUser = signal<User | null>(null);
+  authStatus = signal<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+  authMode = signal<'login' | 'signup'>('signup');
+  loginEmail = signal('');
+  loginPassword = signal('');
+  loginPasswordConfirm = signal('');
+  authError = signal('');
+  
   isAdminLoggedIn = computed(() => {
     const user = this.adminUser();
     return user && user.email === ADMIN_EMAIL;
@@ -791,8 +798,23 @@ export class App implements OnInit {
     this.notification.startChecking();
     this.checkCloudBackupOnBoot();
 
+    if (typeof window !== 'undefined') {
+       if (localStorage.getItem('has_visited_auth') === 'true') {
+          this.authMode.set('login');
+       } else {
+          this.authMode.set('signup');
+       }
+    }
+
     onAuthStateChanged(auth, (user) => {
-      this.adminUser.set(user);
+      if (user) {
+         this.adminUser.set(user);
+         this.authStatus.set('authenticated');
+         this.checkCloudBackupOnBoot();
+      } else {
+         this.adminUser.set(null);
+         this.authStatus.set('unauthenticated');
+      }
     });
     
     await this.updateNotificationPermissionStatus();
@@ -1023,6 +1045,58 @@ export class App implements OnInit {
       }
     }
   }
+
+  // --- Auth Methods ---
+  switchAuthMode(mode: 'login' | 'signup') {
+    this.authMode.set(mode);
+    this.authError.set('');
+  }
+
+  async submitAuth() {
+    this.isProcessing.set(true);
+    this.authError.set('');
+    try {
+      const email = this.loginEmail().trim();
+      const pwd = this.loginPassword();
+      const pwdC = this.loginPasswordConfirm();
+
+      if (!email || !pwd) {
+        throw new Error('กรุณากรอกอีเมลและรหัสผ่าน');
+      }
+
+      if (this.authMode() === 'signup') {
+        if (pwd !== pwdC) {
+          throw new Error('รหัสผ่านไม่ตรงกัน');
+        }
+        await signUpWithEmail(email, pwd);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('has_visited_auth', 'true');
+        }
+      } else {
+        await loginWithEmail(email, pwd);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('has_visited_auth', 'true');
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message) {
+         this.authError.set(err.message);
+      } else {
+         this.authError.set('เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์');
+      }
+    } finally {
+      this.isProcessing.set(false);
+    }
+  }
+
+  async handleUserLogout() {
+     this.isProcessing.set(true);
+     await logout();
+     this.adminUser.set(null);
+     this.authStatus.set('unauthenticated');
+     this.isProcessing.set(false);
+  }
+  // --- End Auth Methods ---
 
   async requestNotificationPermission() {
     this.isProcessing.set(true);

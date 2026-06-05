@@ -1,3 +1,4 @@
+@if (authStatus() === 'authenticated') {
 <div class="h-screen w-full bg-slate-100 text-slate-800 flex font-sans relative overflow-hidden transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]">
 
   <!-- ================= DESKTOP / IPAD SIDEBAR ================= -->
@@ -2814,6 +2815,7 @@
     </div>
   </div>
 }
+}
 
 @if (showSandboxSuccessPopup()) {
   <div class="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md animate-fade-in">
@@ -2841,4 +2843,100 @@
       </button>
     </div>
   </div>
+}
+
+@if (authStatus() === 'unauthenticated') {
+<div class="h-screen w-full bg-slate-50 flex items-center justify-center p-6 font-sans">
+  <div class="bg-white rounded-[40px] shadow-2xl shadow-indigo-100/50 p-8 w-full max-w-md border border-slate-100">
+    <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg mx-auto mb-6">
+      <mat-icon class="!w-8 !h-8 !text-[32px]">school</mat-icon>
+    </div>
+    <h2 class="text-2xl font-black text-center text-slate-800 mb-2">
+      {{ authMode() === 'signup' ? 'เริ่มต้นใช้งาน' : 'เข้าสู่ระบบ' }}
+    </h2>
+    <p class="text-xs text-center text-slate-500 mb-8 font-medium">
+      ระบบตารางเรียนอัจฉริยะ (การแจ้งเตือนทำงานเบื้องหลัง)
+    </p>
+
+    <!-- Form -->
+    <div class="space-y-4">
+      <div>
+        <label for="loginEmail" class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-2">อีเมล</label>
+        <input 
+          id="loginEmail"
+          type="email" 
+          [ngModel]="loginEmail()"
+          (ngModelChange)="loginEmail.set($event)"
+          class="w-full bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800 px-5 py-4 rounded-2xl focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+          placeholder="your@email.com"
+        />
+      </div>
+
+      <div>
+        <label for="loginPassword" class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-2">รหัสผ่าน</label>
+        <input 
+          id="loginPassword"
+          type="password" 
+          [ngModel]="loginPassword()"
+          (ngModelChange)="loginPassword.set($event)"
+          class="w-full bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800 px-5 py-4 rounded-2xl focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+          placeholder="รหัสผ่าน 6 ตัวอักษรขึ้นไป"
+        />
+      </div>
+
+      @if (authMode() === 'signup') {
+      <div>
+        <label for="loginPasswordConfirm" class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-2">ยืนยันรหัสผ่านอีกครั้ง</label>
+        <input 
+          id="loginPasswordConfirm"
+          type="password" 
+          [ngModel]="loginPasswordConfirm()"
+          (ngModelChange)="loginPasswordConfirm.set($event)"
+          class="w-full bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800 px-5 py-4 rounded-2xl focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+          placeholder="พิมพ์รหัสผ่านอีกครั้ง"
+        />
+      </div>
+      }
+
+      @if (authError()) {
+        <div class="bg-rose-50 text-rose-600 text-xs font-bold p-4 rounded-xl border border-rose-100 text-center">
+          {{ authError() }}
+        </div>
+      }
+
+      <button 
+        (click)="submitAuth()"
+        [disabled]="isProcessing()"
+        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm py-4 rounded-2xl shadow-xl shadow-indigo-600/20 active:scale-95 transition-all mt-4 disabled:opacity-70 flex items-center justify-center gap-2"
+      >
+        @if (isProcessing()) {
+          <mat-icon class="animate-spin">sync</mat-icon>
+        }
+        {{ authMode() === 'signup' ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ' }}
+      </button>
+    </div>
+
+    <!-- Toggle Mode -->
+    <div class="mt-8 text-center border-t border-slate-100 pt-6">
+      <span class="text-xs text-slate-500">
+        {{ authMode() === 'signup' ? 'มีบัญชีอยู่แล้ว?' : 'ยังไม่มีบัญชี?' }}
+      </span>
+      <button 
+        (click)="switchAuthMode(authMode() === 'signup' ? 'login' : 'signup')"
+        class="text-xs font-black text-indigo-600 ml-2 hover:underline focus:outline-none"
+      >
+        {{ authMode() === 'signup' ? 'เข้าสู่ระบบที่นี่' : 'สมัครสมาชิกฟรี' }}
+      </button>
+    </div>
+  </div>
+</div>
+} @else {
+<div class="h-screen w-full bg-slate-50 flex items-center justify-center">
+  <div class="flex flex-col items-center gap-4">
+     <div class="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center animate-pulse">
+       <mat-icon class="text-indigo-600 !w-6 !h-6 !text-[24px] animate-spin">sync</mat-icon>
+     </div>
+     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">กำลังตรวจสอบสิทธิ์...</p>
+  </div>
+</div>
 }

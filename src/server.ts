@@ -8,6 +8,11 @@ import express from 'express';
 import {join} from 'node:path';
 import cors from 'cors';
 import { GoogleGenAI, Type } from '@google/genai';
+import { initFirebaseAdmin, startNotificationCron } from './backend-cron';
+
+// Initialize Firebase Admin for background push
+initFirebaseAdmin();
+startNotificationCron();
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 

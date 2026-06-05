@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { initializeFirestore, doc, setDoc, getDoc, onSnapshot, DocumentReference, DocumentSnapshot } from 'firebase/firestore';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -70,6 +70,26 @@ export const signInWithGoogle = async (): Promise<User | null> => {
   }
 };
 
+export const signUpWithEmail = async (email: string, pass: string): Promise<User | null> => {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, pass);
+    return result.user;
+  } catch (err) {
+    console.error('Failed to sign up with Email:', err);
+    throw err;
+  }
+};
+
+export const loginWithEmail = async (email: string, pass: string): Promise<User | null> => {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, pass);
+    return result.user;
+  } catch (err) {
+    console.error('Failed to login with Email:', err);
+    throw err;
+  }
+};
+
 export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
@@ -119,6 +139,9 @@ export const subscribeToGlobalConfig = (callback: (config: GlobalConfig | null) 
 };
 
 export const getOrCreateUserUid = (): string => {
+  if (auth.currentUser && auth.currentUser.uid) {
+    return auth.currentUser.uid;
+  }
   if (typeof window === 'undefined') return 'unknown_user';
   let uid = localStorage.getItem('app_user_uid');
   if (!uid) {
