@@ -5,6 +5,7 @@ import { ClassSession } from './models';
 import { environment } from '../environments/environment';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
+import { GoogleGenAI, Type } from '@google/genai';
 import { AppStore } from './store';
 
 @Injectable({ providedIn: 'root' })
@@ -31,17 +32,17 @@ export class GeminiService {
     
     // หากเข้าใช้งานผ่านคีย์ตัวเองจาก Client หรือบิวต์ใน APK โดยไม่ผ่านส่วนหลังบ้าน
     if (localGeminiKey) {
-      console.log('[GeminiService] Local API Key found. Parsing directly using client-side SDK via REST...');
+      console.log('[GeminiService] Local API Key found. Parsing directly using client-side SDK...');
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${localGeminiKey}`;
-        const b64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+        const ai = new GoogleGenAI({ apiKey: localGeminiKey });
         
-        const payload = {
-          contents: [{
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: {
             parts: [
               {
                 inlineData: {
-                  data: b64Data,
+                  data: base64Image.split(',')[1] || base64Image,
                   mimeType: mimeType,
                 }
               },
@@ -55,38 +56,34 @@ export class GeminiService {
                 '6. If a cell/slot in the 10th period (starting at 15:40) of the grid is empty/blank in the input image, set its subjectName to "เลิกเรียน" (End of School) and keep subjectCode, room, and teacher as empty strings.'
               }
             ]
-          }],
-          generationConfig: {
+          },
+          config: {
             responseMimeType: 'application/json',
             responseSchema: {
-              type: 'ARRAY',
+              type: Type.ARRAY,
               items: {
-                type: 'OBJECT',
+                type: Type.OBJECT,
                 properties: {
-                  id: { type: 'STRING', description: 'Generate a unique string ID' },
-                  dayOfWeek: { type: 'STRING', description: 'Day of week in English, e.g., Monday' },
-                  startTime: { type: 'STRING', description: 'Start time in HH:MM format' },
-                  endTime: { type: 'STRING', description: 'End time in HH:MM format' },
-                  subjectCode: { type: 'STRING', description: 'Subject code (e.g., TH31101)' },
-                  subjectName: { type: 'STRING', description: 'Subject name in Thai (e.g., ภาษาไทยพื้นฐาน). Leave empty if not explicitly written.' },
-                  room: { type: 'STRING', description: 'Room number or name' },
-                  teacher: { type: 'STRING', description: 'Teacher name' },
+                  id: { type: Type.STRING, description: 'Generate a unique string ID' },
+                  dayOfWeek: { type: Type.STRING, description: 'Day of week in English, e.g., Monday' },
+                  startTime: { type: Type.STRING, description: 'Start time in HH:MM format' },
+                  endTime: { type: Type.STRING, description: 'End time in HH:MM format' },
+                  subjectCode: { type: Type.STRING, description: 'Subject code (e.g., TH31101)' },
+                  subjectName: { type: Type.STRING, description: 'Subject name in Thai (e.g., ภาษาไทยพื้นฐาน). Leave empty if not explicitly written.' },
+                  room: { type: Type.STRING, description: 'Room number or name' },
+                  teacher: { type: Type.STRING, description: 'Teacher name' },
                 },
                 required: ['id', 'dayOfWeek', 'startTime', 'endTime', 'subjectCode', 'subjectName', 'room', 'teacher'],
               }
             }
           }
-        };
+        });
 
-        const response: unknown = await lastValueFrom(this.http.post(url, payload));
-
-        const resObj = response as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-        if (!resObj || !resObj.candidates || !resObj.candidates[0]?.content?.parts?.[0]?.text) {
+        if (!response || !response.text) {
           throw new Error('ไม่ได้รับข้อมูลผลลัพธ์จากข้อความตอบกลับของ Gemini');
         }
 
-        const rawText = resObj.candidates[0].content.parts[0].text;
-        const parsed = JSON.parse(rawText) as ClassSession[];
+        const parsed = JSON.parse(response.text) as ClassSession[];
         return parsed || [];
       } catch (err: unknown) {
         console.error('[GeminiService] Error during client-side Gemini parse:', err);

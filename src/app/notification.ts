@@ -308,28 +308,19 @@ export class NotificationService {
         }
 
         if ('Notification' in window) {
-          if (Notification.permission === 'granted') {
-            resolve(true);
-            return;
-          }
-          
-          Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-              import('./firebase-client').then(({ requestFirebaseNotificationPermission }) => {
-                requestFirebaseNotificationPermission().then(token => {
-                  if (token) {
-                    console.log('Firebase Push Notifications Enabled');
-                    localStorage.setItem('fcm_token_granted', 'true');
-                  }
-                  resolve(true);
-                });
-              }).catch(err => {
-                console.warn('Failed to load firebase client:', err);
-                resolve(true); // Still treat as granted if browser perm is ok
-              });
-            } else {
-              resolve(false);
-            }
+          import('./firebase-client').then(({ requestFirebaseNotificationPermission }) => {
+            requestFirebaseNotificationPermission().then(token => {
+              if (token) {
+                console.log('Firebase Push Notifications Enabled');
+                localStorage.setItem('fcm_token_granted', 'true');
+                resolve(true);
+              } else {
+                resolve(Notification.permission === 'granted');
+              }
+            });
+          }).catch(err => {
+            console.warn('Failed to load firebase client or subscribe:', err);
+            resolve(Notification.permission === 'granted'); 
           });
         } else {
           resolve(false);
@@ -344,21 +335,12 @@ export class NotificationService {
     if (typeof window === 'undefined') return;
     if (this.intervalId) return;
     
-    // Check if we are running in browser and have FCM permission explicitly
-    if (!Capacitor.isNativePlatform()) {
-       console.log("Browser environment detected. Starting local schedule check interval.");
-    }
-
-    // เริ่มทำงานการเช็คเวลาทุกๆ 10 วินาที
-    this.intervalId = setInterval(() => this.checkSchedule(), 10000); // every 10s
-    this.checkSchedule();
+    // Front-end scheduling logic was removed to rely purely on the Backend Notification Queue and native Capacitor Alarms
+    console.log("Started Notification Service. Native alarms configured. Web Push relies on Service Worker + Backend.");
   }
 
   stopChecking() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
-    }
+    // No-op for frontend. Background relies on SW
   }
 
   private checkSchedule() {

@@ -19,15 +19,15 @@ try {
 
   onBackgroundMessage(messaging, (payload) => {
     console.log(
-      "[firebase-messaging-sw.js] Received background message ",
+      "[firebase-messaging-sw.js] Received background FCM message ",
       payload,
     );
     const notificationTitle =
       payload.notification?.title || payload.data?.title || "แจ้งเตือนตารางเรียน";
     const notificationOptions = {
       body: payload.notification?.body || payload.data?.body,
-      icon: "/app-icon-192-v5.png",
-      badge: "/app-icon-192-v5.png",
+      icon: "/app-icon-192.png",
+      badge: "/app-icon-192.png",
       data: payload.data || { url: '/' },
       vibrate: [200, 100, 200]
     };
@@ -37,6 +37,31 @@ try {
 } catch (err) {
   console.warn("Firebase Messaging SDK failed to initialize in service worker (expected if offline or blocked):", err);
 }
+
+// Standard Web Push API Handler (for generic subscriptions)
+self.addEventListener('push', function(event) {
+  console.log('[firebase-messaging-sw.js] Standard Push Received.');
+
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { body: event.data.text() };
+    }
+  }
+
+  const title = data.title || "แจ้งเตือนแอปพลิเคชัน";
+  const options = {
+    body: data.body || "คุณมีข้อความใหม่",
+    icon: data.icon || "/app-icon-192.png",
+    badge: data.badge || "/app-icon-192.png",
+    data: data.data || { url: '/' },
+    vibrate: [200, 100, 200]
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
 self.addEventListener('notificationclick', function(event) {
   console.log('[firebase-messaging-sw.js] Notification click Received.', event);

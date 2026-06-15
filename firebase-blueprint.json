@@ -5,110 +5,141 @@
       "description": "FCM Device Token for background push notifications",
       "type": "object",
       "properties": {
-        "token": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "string"
-        },
-        "platform": {
-          "type": "string"
-        },
-        "uid": {
-          "type": "string"
-        }
+        "token": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "platform": { "type": "string" },
+        "uid": { "type": "string" }
       },
-      "required": [
-        "token",
-        "createdAt",
-        "platform",
-        "uid"
-      ]
+      "required": ["token", "createdAt", "platform", "uid"]
     },
     "BackupData": {
       "title": "BackupData",
       "description": "JSON payload backup for student timetable and custom preferences",
       "type": "object",
       "properties": {
-        "schedule": {
-          "type": "array"
-        },
-        "settings": {
-          "type": "object"
-        },
-        "active": {
-          "type": "boolean"
-        },
-        "updatedAt": {
-          "type": "string"
-        }
+        "schedule": { "type": "array" },
+        "settings": { "type": "object" },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
       },
-      "required": [
-        "schedule",
-        "settings",
-        "active",
-        "updatedAt"
-      ]
+      "required": ["schedule", "settings", "active", "updatedAt"]
     },
     "DiagnosticLog": {
       "title": "DiagnosticLog",
       "description": "Diagnostic logger results upload",
       "type": "object",
       "properties": {
-        "logs": {
-          "type": "array"
-        },
-        "uploadedAt": {
-          "type": "string"
-        },
-        "userAgent": {
-          "type": "string"
-        }
+        "logs": { "type": "array" },
+        "uploadedAt": { "type": "string" },
+        "userAgent": { "type": "string" }
       },
-      "required": [
-        "logs",
-        "uploadedAt",
-        "userAgent"
-      ]
+      "required": ["logs", "uploadedAt", "userAgent"]
     },
     "GlobalConfig": {
       "title": "GlobalConfig",
       "description": "Global settings and remote admin control",
       "type": "object",
       "properties": {
-        "backendApiUrl": {
-          "type": "string"
-        },
-        "subjectMappings": {
-          "type": "object"
-        },
-        "githubRepo": {
-          "type": "string"
-        },
-        "broadcastText": {
-          "type": "string"
-        },
-        "maintenanceMode": {
-          "type": "boolean"
-        },
-        "updatedAt": {
-          "type": "string"
-        }
+        "backendApiUrl": { "type": "string" },
+        "subjectMappings": { "type": "object" },
+        "githubRepo": { "type": "string" },
+        "broadcastText": { "type": "string" },
+        "maintenanceMode": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
       },
-      "required": [
-        "backendApiUrl",
-        "subjectMappings",
-        "githubRepo",
-        "broadcastText",
-        "maintenanceMode",
-        "updatedAt"
-      ]
+      "required": ["backendApiUrl", "subjectMappings", "githubRepo", "broadcastText", "maintenanceMode", "updatedAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A registered user of the application.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "A class schedule entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "startTime": { "type": "string", "description": "Format: HH:mm" },
+        "endTime": { "type": "string", "description": "Format: HH:mm" },
+        "subjectCode": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "room": { "type": "string" },
+        "teacher": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "day", "startTime", "endTime"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "A Web Push API subscription.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "keys": {
+          "type": "object",
+          "properties": {
+            "p256dh": { "type": "string" },
+            "auth": { "type": "string" }
+          },
+          "required": ["p256dh", "auth"]
+        },
+        "deviceId": { "type": "string" },
+        "os": { "type": "string" },
+        "browser": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastUsed": { "type": "string" }
+      },
+      "required": ["userId", "endpoint", "keys", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A queued push notification.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "scheduleId": { "type": "string" },
+        "sendAt": { "type": "string", "format": "date-time" },
+        "timestamp": { "type": "number", "description": "Unix timestamp in ms for indexing" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "sent", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "sendAt", "timestamp", "title", "body", "status", "createdAt"]
+    },
+    "NotificationLog": {
+      "title": "NotificationLog",
+      "description": "Log of a sent or failed notification.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "notificationId": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "failed"] },
+        "sentAt": { "type": "string", "format": "date-time" },
+        "error": { "type": "string" }
+      },
+      "required": ["userId", "notificationId", "status", "sentAt"]
     }
   },
   "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles. ID matches Firebase Auth UID."
+    },
     "users/{userId}/devices/{deviceId}": {
       "schema": "DeviceToken",
-      "description": "Notification tokens mapping"
+      "description": "Notification tokens mapping (legacy FCM)"
     },
     "users/{userId}/backup/data": {
       "schema": "BackupData",
@@ -120,7 +151,23 @@
     },
     "global_settings/config": {
       "schema": "GlobalConfig",
-      "description": "Global configs managed by admin khaophan.po@gmail.com"
+      "description": "Global configs managed by admin"
+    },
+    "schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Schedules for all users."
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Durable queue for notifications to send."
+    },
+    "pushSubscriptions/{subscriptionId}": {
+      "schema": "PushSubscription",
+      "description": "Active Web Push subscriptions."
+    },
+    "notificationLogs/{logId}": {
+      "schema": "NotificationLog",
+      "description": "Audit log for push notification deliveries."
     }
   }
 }

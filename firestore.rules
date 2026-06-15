@@ -1,48 +1,200 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper to check if signed-in user is Admin
-    function isAdmin() {
-      return request.auth != null 
-        && request.auth.token.email == 'khaophan.po@gmail.com' 
-        && request.auth.token.email_verified == true;
+    // --------------------------------------------------------------------------
+    // GLOBAL VALIDATION HELPERS
+    // --------------------------------------------------------------------------
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && request.auth.token.email == 'khaophan.po@gmail.com'; }
+    function isSystemBackend() { return isSignedIn() && request.auth.token.email == 'backend_scheduler_robot@system.local'; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'createdAt']) &&
+             data.email is string && data.email.size() <= 128 &&
+             data.createdAt is string && data.createdAt.size() <= 128;
     }
 
-    // Helper to validate a generic document ID
-    function isValidId(id) {
-       return id is string && id.size() <= 128;
+    function isValidDeviceToken(data) {
+      return data.keys().hasAll(['token', 'createdAt', 'platform', 'uid']) &&
+             data.token is string && data.token.size() <= 512 &&
+             data.createdAt is string && data.createdAt.size() <= 128 &&
+             data.platform is string && data.platform.size() <= 128 &&
+             data.uid is string && data.uid.size() <= 128;
     }
 
-    // Default deny catch-all for Zero-Trust Firestore Security
+    function isValidBackupData(data) {
+      return data.keys().hasAll(['schedule', 'settings', 'active', 'updatedAt']) &&
+             data.schedule is list && data.schedule.size() <= 1000 &&
+             data.settings is map &&
+             data.active is bool &&
+             data.updatedAt is string && data.updatedAt.size() <= 128;
+    }
+
+    function isValidDiagnosticLog(data) {
+      return data.keys().hasAll(['logs', 'uploadedAt', 'userAgent']) &&
+             data.logs is list && data.logs.size() <= 1000 &&
+             data.uploadedAt is string && data.uploadedAt.size() <= 128 &&
+             data.userAgent is string && data.userAgent.size() <= 512;
+    }
+
+    function isValidGlobalConfig(data) {
+      return data.keys().hasAll(['backendApiUrl', 'subjectMappings', 'githubRepo', 'broadcastText', 'maintenanceMode', 'updatedAt']) &&
+             data.backendApiUrl is string && data.backendApiUrl.size() <= 512 &&
+             data.subjectMappings is map &&
+             data.githubRepo is string && data.githubRepo.size() <= 512 &&
+             data.broadcastText is string && data.broadcastText.size() <= 1024 &&
+             data.maintenanceMode is bool &&
+             data.updatedAt is string && data.updatedAt.size() <= 128;
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['userId', 'day', 'startTime', 'endTime']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.day is string && data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+             data.startTime is string && data.startTime.size() == 5 &&
+             data.endTime is string && data.endTime.size() == 5;
+    }
+
+    function isValidPushSubscription(data) {
+      return data.keys().hasAll(['userId', 'endpoint', 'keys', 'createdAt']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.endpoint is string && data.endpoint.size() <= 1024 &&
+             data.keys is map && data.keys.keys().hasAll(['p256dh', 'auth']) &&
+             data.keys.p256dh is string && data.keys.p256dh.size() <= 512 &&
+             data.keys.auth is string && data.keys.auth.size() <= 512 &&
+             data.createdAt is string && data.createdAt.size() <= 128;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'sendAt', 'timestamp', 'title', 'body', 'status', 'createdAt']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.sendAt is string && data.sendAt.size() <= 128 &&
+             data.timestamp is number &&
+             data.title is string && data.title.size() <= 256 &&
+             data.body is string && data.body.size() <= 1024 &&
+             data.status is string && data.status in ['pending', 'sent', 'failed'] &&
+             data.createdAt is string && data.createdAt.size() <= 128;
+    }
+
+    function isValidNotificationLog(data) {
+      return data.keys().hasAll(['userId', 'notificationId', 'status', 'sentAt']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.notificationId is string && data.notificationId.size() <= 128 &&
+             data.status is string && data.status in ['sent', 'failed'] &&
+             data.sentAt is string && data.sentAt.size() <= 128;
+    }
+
+    // --------------------------------------------------------------------------
+    // DEFAULT DENY
+    // --------------------------------------------------------------------------
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // device registrations for FCM notification tokens
-    match /users/{userId}/devices/{deviceId} {
-      allow read: if isAdmin();
-      allow write: if isValidId(userId) && isValidId(deviceId) && (
-        request.resource.data.uid == userId && 
-        request.resource.data.token == deviceId
-      );
+    // --------------------------------------------------------------------------
+    // USERS COLLECTION
+    // --------------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSystemBackend() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+                    isValidUser(incoming()) &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().email == existing().email &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['email', 'createdAt']);
+
+      match /devices/{deviceId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(deviceId) && isValidDeviceToken(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(deviceId) &&
+                      isValidDeviceToken(incoming()) &&
+                      incoming().createdAt == existing().createdAt &&
+                      incoming().uid == existing().uid &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['token', 'platform']);
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(deviceId);
+      }
+
+      match /backup/data {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidBackupData(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId &&
+                      isValidBackupData(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['schedule', 'settings', 'active', 'updatedAt']);
+      }
+
+      match /diagnostics/{logId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(logId) && isValidDiagnosticLog(incoming());
+      }
     }
 
-    // Backups of timetable and options per student (anonymous UUID)
-    match /users/{userId}/backup/data {
-      allow read, write: if isValidId(userId);
-    }
-
-    // Diagnostics logs
-    match /users/{userId}/diagnostics/{logId} {
-      allow read: if isAdmin();
-      allow write: if isValidId(userId) && isValidId(logId);
-    }
-
-    // Global administrative settings and default custom mappings
+    // --------------------------------------------------------------------------
+    // GLOBAL CONFIG COLLECTION
+    // --------------------------------------------------------------------------
     match /global_settings/config {
-      allow read: if true; // Any device globally reads default configurations
-      allow write: if isAdmin(); // Only Admin khaophan.po@gmail.com can write/update
+      allow read: if true; // Public configuration parameters accessible to everyone
+      allow write: if isAdmin() && isValidGlobalConfig(incoming());
+    }
+
+    // --------------------------------------------------------------------------
+    // SCHEDULES COLLECTION
+    // --------------------------------------------------------------------------
+    match /schedules/{scheduleId} {
+      allow list: if isSystemBackend() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isSystemBackend() || (isSignedIn() && existing().userId == request.auth.uid && isValidId(scheduleId));
+      allow create: if isSignedIn() && isValidId(scheduleId) && isValidSchedule(incoming());
+      allow update: if isSignedIn() && isValidId(scheduleId) &&
+                    existing().userId == request.auth.uid &&
+                    isValidSchedule(incoming()) &&
+                    incoming().userId == existing().userId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['day', 'startTime', 'endTime', 'subjectCode', 'subjectName', 'room', 'teacher', 'notes']);
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid && isValidId(scheduleId);
+    }
+
+    // --------------------------------------------------------------------------
+    // PUSH SUBSCRIPTIONS COLLECTION
+    // --------------------------------------------------------------------------
+    match /pushSubscriptions/{subscriptionId} {
+      allow list: if isSystemBackend() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isSystemBackend() || (isSignedIn() && existing().userId == request.auth.uid && isValidId(subscriptionId));
+      allow create: if isSignedIn() && isValidId(subscriptionId) && isValidPushSubscription(incoming());
+      allow update: if isSignedIn() && isValidId(subscriptionId) &&
+                    existing().userId == request.auth.uid &&
+                    isValidPushSubscription(incoming()) &&
+                    incoming().userId == existing().userId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastUsed']);
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid && isValidId(subscriptionId);
+    }
+
+    // --------------------------------------------------------------------------
+    // NOTIFICATIONS COLLECTION
+    // --------------------------------------------------------------------------
+    match /notifications/{notificationId} {
+      allow list: if isSystemBackend() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isSystemBackend() || (isSignedIn() && existing().userId == request.auth.uid && isValidId(notificationId));
+      allow create: if isSystemBackend() || (isSignedIn() && isValidId(notificationId) && isValidNotification(incoming()));
+      allow update: if isSystemBackend() || (isSignedIn() && isValidId(notificationId) &&
+                    existing().userId == request.auth.uid &&
+                    isValidNotification(incoming()) &&
+                    incoming().userId == existing().userId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status']));
+      allow delete: if isSystemBackend() || (isSignedIn() && existing().userId == request.auth.uid && isValidId(notificationId));
+    }
+
+    // --------------------------------------------------------------------------
+    // NOTIFICATION LOGS COLLECTION
+    // --------------------------------------------------------------------------
+    match /notificationLogs/{logId} {
+      allow list: if isSystemBackend() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isSystemBackend() || (isSignedIn() && existing().userId == request.auth.uid && isValidId(logId));
+      allow create: if isSystemBackend() || (isSignedIn() && isValidId(logId) && isValidNotificationLog(incoming()));
     }
   }
 }

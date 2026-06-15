@@ -11,8 +11,8 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { environment } from '../environments/environment';
-import { auth, ADMIN_EMAIL, GlobalConfig, signUpWithEmail, loginWithEmail, logout } from './firebase-client';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth, ADMIN_EMAIL, GlobalConfig, signInWithGoogle, logout } from './firebase-client';
+import { onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 
 interface BackupData {
   schedule?: ClassSession[];
@@ -38,7 +38,7 @@ export class App implements OnInit {
   notification = inject(NotificationService);
   notificationPermission = signal<string>('default');
 
-  activeTab = signal<'home' | 'schedule' | 'calendar' | 'settings' | 'debug' | 'admin'>('home');
+  activeTab = signal<'home' | 'schedule' | 'calendar' | 'settings' | 'debug' | 'admin' | 'auth'>('home');
   isProcessing = signal(false);
   currentTime = signal<Date>(new Date());
 
@@ -53,20 +53,89 @@ export class App implements OnInit {
   newAdminMappingName = signal('');
 
   // Authentication Signals
-  adminUser = signal<User | null>(null);
-  authStatus = signal<'loading' | 'authenticated' | 'unauthenticated'>('loading');
-  authMode = signal<'login' | 'signup'>('signup');
-  loginEmail = signal('');
-  loginPassword = signal('');
-  loginPasswordConfirm = signal('');
-  authError = signal('');
+  currentUser = signal<User | null>(null);
+  authMode = signal<'login' | 'register'>('login');
+  authEmail = signal('');
+  authPassword = signal('');
+  syncStatus = signal('');
   
   isAdminLoggedIn = computed(() => {
-    const user = this.adminUser();
+    const user = this.currentUser();
     return user && user.email === ADMIN_EMAIL;
   });
+  
+  async updateAuthEmail(event: Event) { this.authEmail.set((event.target as HTMLInputElement).value); }
+  async updateAuthPassword(event: Event) { this.authPassword.set((event.target as HTMLInputElement).value); }
+  
+  async handleEmailLogin() {
+    if (!this.authEmail() || !this.authPassword()) return alert("กรุณากรอกอีเมลและรหัสผ่าน");
+    this.isProcessing.set(true);
+    try {
+      await signInWithEmailAndPassword(auth, this.authEmail(), this.authPassword());
+      this.syncStatus.set('เข้าสู่ระบบสำเร็จ');
+      this.setTab('home');
+    } catch(err: unknown) {
+      alert("เข้าสู่ระบบล้มเหลว: " + (err instanceof Error ? err.message : String(err)));
+    }
+    this.isProcessing.set(false);
+  }
+
+  async handleEmailRegister() {
+    if (!this.authEmail() || !this.authPassword()) return alert("กรุณากรอกอีเมลและรหัสผ่าน");
+    this.isProcessing.set(true);
+    try {
+      await createUserWithEmailAndPassword(auth, this.authEmail(), this.authPassword());
+      this.syncStatus.set('สมัครสมาชิกสำเร็จ');
+      this.setTab('home');
+    } catch(err: unknown) {
+      alert("สมัครสมาชิกล้มเหลว: " + (err instanceof Error ? err.message : String(err)));
+    }
+    this.isProcessing.set(false);
+  }
+
+  async doGoogleLogin() {
+    this.isProcessing.set(true);
+    try {
+      await signInWithGoogle();
+      this.syncStatus.set('เข้าสู่ระบบสำเร็จ');
+      this.setTab('home');
+    } catch {
+      // Ignored
+    }
+    this.isProcessing.set(false);
+  }
+
+  async doLogout() {
+    await logout();
+    this.syncStatus.set('ออกจากระบบแล้ว');
+  }
 
   
+  // Admin Debug Signals
+  pushToken = signal<string | null>(null);
+  pushSubscriptionStatus = signal<string>('Unknown');
+  schedulerStatus = signal<string>('Loading...');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  notificationQueueItems = signal<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  notificationLogsItems = signal<any[]>([]);
+  notificationSuccessCount = signal<number>(0);
+  notificationFailedCount = signal<number>(0);
+  
+  async loadDashboardData() {
+    try {
+      const { fetchDiagnosticInfo } = await import('./firebase-client');
+      const info = await fetchDiagnosticInfo();
+      this.pushToken.set(info.pushToken);
+      this.pushSubscriptionStatus.set(info.subscriptionStatus);
+      this.notificationQueueItems.set(info.queueItems);
+      this.notificationLogsItems.set(info.logItems);
+      this.notificationSuccessCount.set(info.sCount);
+      this.notificationFailedCount.set(info.fCount);
+      this.schedulerStatus.set('Active (Backend Interval 60s)');
+    } catch { /* ignore */ }
+  }
+
   readinessScore = computed(() => {
     let score = 100;
     
@@ -798,23 +867,8 @@ export class App implements OnInit {
     this.notification.startChecking();
     this.checkCloudBackupOnBoot();
 
-    if (typeof window !== 'undefined') {
-       if (localStorage.getItem('has_visited_auth') === 'true') {
-          this.authMode.set('login');
-       } else {
-          this.authMode.set('signup');
-       }
-    }
-
     onAuthStateChanged(auth, (user) => {
-      if (user) {
-         this.adminUser.set(user);
-         this.authStatus.set('authenticated');
-         this.checkCloudBackupOnBoot();
-      } else {
-         this.adminUser.set(null);
-         this.authStatus.set('unauthenticated');
-      }
+      this.currentUser.set(user);
     });
     
     await this.updateNotificationPermissionStatus();
@@ -919,8 +973,11 @@ export class App implements OnInit {
     await this.setPref('has_seen_onboarding', 'true');
   }
 
-  setTab(tab: 'home' | 'schedule' | 'settings' | 'calendar' | 'debug' | 'admin') {
+  async setTab(tab: 'home' | 'schedule' | 'settings' | 'calendar' | 'debug' | 'admin' | 'auth') {
     this.activeTab.set(tab);
+    if (tab === 'debug' || tab === 'home') {
+      this.loadDashboardData();
+    }
   }
 
   toggleActive() {
@@ -1045,68 +1102,6 @@ export class App implements OnInit {
       }
     }
   }
-
-  // --- Auth Methods ---
-  switchAuthMode(mode: 'login' | 'signup') {
-    this.authMode.set(mode);
-    this.authError.set('');
-  }
-
-  async submitAuth() {
-    this.isProcessing.set(true);
-    this.authError.set('');
-    try {
-      const email = this.loginEmail().trim();
-      const pwd = this.loginPassword();
-      const pwdC = this.loginPasswordConfirm();
-
-      if (!email || !pwd) {
-        throw new Error('กรุณากรอกอีเมลและรหัสผ่าน');
-      }
-
-      if (this.authMode() === 'signup') {
-        if (pwd !== pwdC) {
-          throw new Error('รหัสผ่านไม่ตรงกัน');
-        }
-        await signUpWithEmail(email, pwd);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('has_visited_auth', 'true');
-        }
-      } else {
-        await loginWithEmail(email, pwd);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('has_visited_auth', 'true');
-        }
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        if (err.message.includes('auth/email-already-in-use')) {
-           this.authError.set('อีเมลนี้ถูกใช้งานแล้ว กรุณาเข้าสู่ระบบ');
-        } else if (err.message.includes('auth/invalid-credential') || err.message.includes('auth/wrong-password') || err.message.includes('auth/user-not-found')) {
-           this.authError.set('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
-        } else if (err.message.includes('auth/weak-password')) {
-           this.authError.set('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
-        } else if (err.message.includes('auth/invalid-email')) {
-           this.authError.set('รูปแบบอีเมลไม่ถูกต้อง');
-        } else {
-           this.authError.set(err.message);
-        }
-      } else {
-         this.authError.set('เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์');
-      }
-    } finally {
-      this.isProcessing.set(false);
-    }
-  }
-
-  async handleUserLogout() {
-     this.isProcessing.set(true);
-     await logout();
-     this.adminUser.set(null);
-     this.authStatus.set('unauthenticated');
-     this.isProcessing.set(false);
-  }
-  // --- End Auth Methods ---
 
   async requestNotificationPermission() {
     this.isProcessing.set(true);
@@ -1325,12 +1320,12 @@ export class App implements OnInit {
       const user = await signInWithGoogle();
       if (user) {
         if (user.email === 'khaophan.po@gmail.com') {
-          this.adminUser.set(user);
+          this.currentUser.set(user);
           this.setTab('admin');
         } else {
           const { logout } = await import('./firebase-client');
           await logout();
-          this.adminUser.set(null);
+          this.currentUser.set(null);
           alert('สิทธิ์ปฏิเสธการเข้าสู่ระบบ: อีเมลของคุณไม่ใช่ khaophan.po@gmail.com');
         }
       }
@@ -1348,7 +1343,7 @@ export class App implements OnInit {
     try {
       const { logout } = await import('./firebase-client');
       await logout();
-      this.adminUser.set(null);
+      this.currentUser.set(null);
       this.setTab('home');
     } catch (e) {
       console.error('Logout error:', e);

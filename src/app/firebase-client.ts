@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getMessaging, onMessage } from 'firebase/messaging';
 import { initializeFirestore, doc, setDoc, getDoc, onSnapshot, DocumentReference, DocumentSnapshot } from 'firebase/firestore';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -70,26 +70,6 @@ export const signInWithGoogle = async (): Promise<User | null> => {
   }
 };
 
-export const signUpWithEmail = async (email: string, pass: string): Promise<User | null> => {
-  try {
-    const result = await createUserWithEmailAndPassword(auth, email, pass);
-    return result.user;
-  } catch (err) {
-    console.error('Failed to sign up with Email:', err);
-    throw err;
-  }
-};
-
-export const loginWithEmail = async (email: string, pass: string): Promise<User | null> => {
-  try {
-    const result = await signInWithEmailAndPassword(auth, email, pass);
-    return result.user;
-  } catch (err) {
-    console.error('Failed to login with Email:', err);
-    throw err;
-  }
-};
-
 export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
@@ -139,10 +119,8 @@ export const subscribeToGlobalConfig = (callback: (config: GlobalConfig | null) 
 };
 
 export const getOrCreateUserUid = (): string => {
-  if (auth.currentUser && auth.currentUser.uid) {
-    return auth.currentUser.uid;
-  }
   if (typeof window === 'undefined') return 'unknown_user';
+  if (auth.currentUser) return auth.currentUser.uid;
   let uid = localStorage.getItem('app_user_uid');
   if (!uid) {
     uid = 'user_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -178,9 +156,126 @@ export const backupScheduleSettings = async (schedule: unknown, settings: unknow
       updatedAt: new Date().toISOString()
     });
     console.log('Schedule data backed up to cloud successfully.');
+    await syncNotificationQueue(uid, schedule as any[], settings as any, active as boolean);
   } catch (err) {
     console.error('Failed to backup schedule data:', err);
   }
+};
+
+const syncNotificationQueue = async (uid: string, schedule: any[], settings: any, active: boolean) => {
+  if (!active || !schedule || schedule.length === 0) return;
+  try {
+    const { writeBatch, collection, query, where, getDocs, doc } = await import('firebase/firestore');
+    
+    // 1. Delete all existing pending notifications first
+    const pendingQuery = query(collection(db, 'notifications'), where('userId', '==', uid), where('status', '==', 'pending'));
+    const pendingSnaps = await getDocs(pendingQuery);
+    
+    const batch = writeBatch(db);
+    
+    pendingSnaps.forEach(snap => {
+        batch.delete(snap.ref);
+    });
+    
+    // Day mapping
+    const now = new Date();
+    const dayMap: Record<string, number> = {
+      'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6
+    };
+    
+    // Generate for next 7 days
+    for (let i = 0; i < 7; i++) {
+        const targetDate = new Date(now);
+        targetDate.setDate(targetDate.getDate() + i);
+        const targetClassDay = targetDate.getDay();
+        
+        for (const session of schedule) {
+           if (!session.dayOfWeek) continue;
+           const sessionDay = dayMap[session.dayOfWeek.trim().toLowerCase()];
+           if (sessionDay === targetClassDay) {
+               
+               const [startH, startM] = session.startTime.split(':').map(Number);
+               const preNotifyMinutes = settings.preNotifyMinutes !== undefined ? settings.preNotifyMinutes : 3;
+               let notifyH = startH;
+               let notifyM = startM - preNotifyMinutes;
+               
+               while (notifyM < 0) { notifyM += 60; notifyH -= 1; }
+               if (notifyH < 0) { notifyH = (notifyH % 24 + 24) % 24; }
+               
+               const notifyTime = new Date(targetDate);
+               notifyTime.setHours(notifyH, notifyM, 0, 0);
+               
+               if (notifyTime > now) {
+                   const notifId = `${uid}_start_${session.id}_${notifyTime.getTime()}`;
+                   const notifRef = doc(collection(db, 'notifications'), notifId);
+                   
+                   const subjectName = session.subjectName || session.subjectCode || 'ไม่ระบุวิชา';
+                   const bodyText = preNotifyMinutes > 0 
+                     ? `อีก ${preNotifyMinutes} นาทีจะเริ่มเรียน\nวิชา: ${subjectName}\nเวลา: ${session.startTime} น.`
+                     : `ได้เวลาเริ่มเรียน\nวิชา: ${subjectName}\nเวลา: ${session.startTime} น.`;
+                     
+                   batch.set(notifRef, {
+                       userId: uid,
+                       sendAt: notifyTime.toISOString(),
+                       timestamp: notifyTime.getTime(),
+                       title: preNotifyMinutes > 0 ? `แจ้งเตือนเข้าเรียน (ล่วงหน้า ${preNotifyMinutes} นาที)` : 'แจ้งเตือนเริ่มชั้นเรียน',
+                       body: bodyText,
+                       status: 'pending',
+                       createdAt: new Date().toISOString()
+                   });
+               }
+           }
+        }
+    }
+    
+    await batch.commit();
+    console.log('Notification queue synced successfully.');
+  } catch (err) {
+    console.error('Failed to sync notification queue:', err);
+  }
+};
+
+export const fetchDiagnosticInfo = async () => {
+  const uid = getOrCreateUserUid();
+  let pushToken = localStorage.getItem('fcm_token_granted') ? 'Granted/Subscribed' : 'Not Subscribed';
+  let subscriptionStatus = 'Inactive';
+  let queueItems: any[] = [];
+  let logItems: any[] = [];
+  let sCount = 0;
+  let fCount = 0;
+  
+  try {
+    const { collection, query, where, getDocs, orderBy, limit } = await import('firebase/firestore');
+    
+    // Subscriptions
+    const subQuery = query(collection(db, "pushSubscriptions"), where("userId", "==", uid), limit(1));
+    const subSnaps = await getDocs(subQuery);
+    if (!subSnaps.empty) {
+        subscriptionStatus = 'Registered & Active';
+        pushToken = subSnaps.docs[0].data()['endpoint'].substring(0, 50) + '...';
+    }
+
+    // Queue
+    const qQuery = query(collection(db, "notifications"), where("userId", "==", uid), orderBy("sendAt", "asc"), limit(20));
+    const qSnaps = await getDocs(qQuery);
+    queueItems = qSnaps.docs.map(d => ({id: d.id, ...d.data()}));
+
+    // Logs
+    const lQuery = query(collection(db, "notificationLogs"), where("userId", "==", uid), orderBy("sentAt", "desc"), limit(20));
+    const lSnaps = await getDocs(lQuery);
+    logItems = lSnaps.docs.map(d => {
+        const data = d.data();
+        if (data['status'] === 'sent') sCount++;
+        if (data['status'] === 'failed') fCount++;
+        return {id: d.id, ...data};
+    });
+
+  } catch(e) {
+    console.error("fetchDiagnosticInfo Error:", e);
+    // Ignore permissions errors
+  }
+  
+  return { pushToken, subscriptionStatus, queueItems, logItems, sCount, fCount };
 };
 
 export const restoreScheduleSettings = async () => {
@@ -205,51 +300,47 @@ export const restoreScheduleSettings = async () => {
 };
 
 export const requestFirebaseNotificationPermission = async () => {
-  if (!messaging) return null;
   if (typeof window === 'undefined') return null;
 
   try {
-    // 1. ตรวจสอบว่าเคยได้ Token หรือยังจาก LocalStorage 
-    // เพื่อป้องกันการขอรับ Token ซ้ำและลดภาระของ Firebase
-    const cachedToken = localStorage.getItem('fcm_token');
-    if (cachedToken && Notification.permission === 'granted') {
-      console.log('Using cached FCM token.');
-      return cachedToken;
-    }
-
-    // 2. ขอสิทธิ์ Notification Permission
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       
-      // 3. ลงทะเบียนและรับ Service Worker สำหรับจัดการ background Notification
       const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { type: 'module' });
-
-      // 4. สมัครรับ Push Notification และได้ FCM Token
-      // เราใช้ serviceWorkerRegistration ที่แน่ใจว่าเชื่อมต่อถูกต้อง
-      const token = await getToken(messaging, {
-        serviceWorkerRegistration: swRegistration,
+      await navigator.serviceWorker.ready;
+      
+      // Fetch Vapid Public Key from backend
+      const res = await fetch('/api/push/vapidPublicKey');
+      const { publicKey } = await res.json();
+      
+      // Convert VAPID key to Uint8Array
+      const padding = '='.repeat((4 - publicKey.length % 4) % 4);
+      const base64 = (publicKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      
+      // Subscribe to Web Push
+      const subscription = await swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: outputArray
       });
 
-      if (token) {
-        console.log('FCM Token received:', token);
-        const uid = getOrCreateUserUid();
-        
-        // 5. บันทึก Token ลง Firestore ถือว่าจัดการเชื่อมกับ user uid (เป็น anonymous uuid)
-        // เพื่อให้ฝั่ง backend นำไปใช้ส่งข้อความตามเวลาได้
-        await setDoc(doc(db, 'users', uid, 'devices', token), {
-          token,
-          createdAt: new Date().toISOString(),
-          platform: 'web',
-          uid: uid
-        }, { merge: true });
+      const subData = JSON.parse(JSON.stringify(subscription));
 
-        // เก็บไว้ใน LocalStorage ว่าเคยได้ Token แล้ว
-        localStorage.setItem('fcm_token', token);
+      const uid = getOrCreateUserUid();
+      await setDoc(doc(db, 'pushSubscriptions', subData.endpoint.split('/').pop() || uid), {
+        userId: uid,
+        endpoint: subData.endpoint,
+        keys: subData.keys,
+        createdAt: new Date().toISOString()
+      }, { merge: true });
 
-        return token;
-      } else {
-        console.warn('No registration token available. Request permission to generate one.');
-      }
+      localStorage.setItem('fcm_token_granted', 'true');
+      console.log('Web Push Subscription saved successfully.');
+      return subData.endpoint;
     }
     return null;
   } catch (error) {
