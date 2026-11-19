@@ -5,7 +5,7 @@
     "ng": "ng",
     "start": "ng serve",
     "dev": "cross-env NG_ALLOWED_HOSTS=\"localhost,127.0.0.1,0.0.0.0,ais-dev-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app,ais-pre-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app,.*\" ng serve --port=3000 --host=0.0.0.0 --define=\"GEMINI_API_KEY=\\'${GEMINI_API_KEY}\\'\" ${DISABLE_HMR:+--live-reload=false}",
-    "build": "ng build",
+    "build": "cross-env GOMAXPROCS=1 NODE_OPTIONS=\"--max-old-space-size=768\" ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "ng lint",

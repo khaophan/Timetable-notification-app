@@ -586,6 +586,18 @@ export const savePushSubscriptionObject = async (subData: {
   }
 };
 
+export function resolveApiUrl(path: string): string {
+  if (typeof window === 'undefined') return path;
+  const origin = window.location.origin;
+  if (
+    origin.includes('vercel.app') ||
+    (!origin.includes('localhost') && !origin.includes('127.0.0.1') && !origin.includes('run.app'))
+  ) {
+    return `https://ais-dev-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app${path}`;
+  }
+  return path;
+}
+
 export const requestFirebaseNotificationPermission = async (): Promise<string | null> => {
   if (typeof window === 'undefined' || !('Notification' in window)) return null;
 
@@ -596,7 +608,7 @@ export const requestFirebaseNotificationPermission = async (): Promise<string | 
     const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
 
-    const res = await fetch('/api/push/vapidPublicKey');
+    const res = await fetch(resolveApiUrl('/api/push/vapidPublicKey'));
     const { publicKey } = (await res.json()) as { publicKey: string };
     if (!publicKey) return null;
 
@@ -653,7 +665,7 @@ export const sendServerTestPush = async (
   if (!uid) return null;
 
   try {
-    const res = await fetch('/api/push/test', {
+    const res = await fetch(resolveApiUrl('/api/push/test'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -680,7 +692,7 @@ export const scheduleServerPushSnooze = async (
   if (!uid) return false;
 
   try {
-    const res = await fetch('/api/push/snooze', {
+    const res = await fetch(resolveApiUrl('/api/push/snooze'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: uid, title, body, delaySeconds }),

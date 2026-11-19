@@ -170,8 +170,8 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
       allow update: if isSignedIn() && request.auth.uid == userId &&
                     isValidUser(incoming()) &&
-                    incoming().createdAt == existing().createdAt &&
-                    incoming().email == existing().email &&
+                    (!('createdAt' in existing()) || !(existing().createdAt is string) || existing().createdAt == '' || incoming().createdAt == existing().createdAt) &&
+                    (!('email' in existing()) || !(existing().email is string) || existing().email == '' || incoming().email == existing().email) &&
                     incoming().diff(existing()).affectedKeys().hasOnly([
                       'email', 'createdAt', 'role', 'displayName', 'selectedClassId', 'selectedGrade', 'selectedRoom'
                     ]);

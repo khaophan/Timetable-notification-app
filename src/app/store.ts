@@ -65,24 +65,6 @@ export class AppStore implements OnDestroy {
     this.purgeLegacyCachedUrls();
     void this.loadState();
 
-    if (typeof window !== 'undefined') {
-      this.unsubscribeGlobalConfig = subscribeToGlobalConfig((config) => {
-        if (config) {
-          this.globalConfig.set(config);
-          if (config.subjectMappings) {
-            try {
-              const localSaved = localStorage.getItem('subject_mappings') || '{}';
-              const localMap = JSON.parse(localSaved) as Record<string, string>;
-              const merged = { ...localMap, ...config.subjectMappings };
-              localStorage.setItem('subject_mappings', JSON.stringify(merged));
-            } catch {
-              // Non-fatal
-            }
-          }
-        }
-      });
-    }
-
     // Apply dark/light root class reactively
     effect(() => {
       const mode = this.themeMode();
@@ -127,9 +109,35 @@ export class AppStore implements OnDestroy {
     });
   }
 
+  startRealtimeListeners(): void {
+    if (typeof window === 'undefined' || this.unsubscribeGlobalConfig) return;
+    this.unsubscribeGlobalConfig = subscribeToGlobalConfig((config) => {
+      if (config) {
+        this.globalConfig.set(config);
+        if (config.subjectMappings) {
+          try {
+            const localSaved = localStorage.getItem('subject_mappings') || '{}';
+            const localMap = JSON.parse(localSaved) as Record<string, string>;
+            const merged = { ...localMap, ...config.subjectMappings };
+            localStorage.setItem('subject_mappings', JSON.stringify(merged));
+          } catch {
+            // Non-fatal
+          }
+        }
+      }
+    });
+  }
+
+  stopRealtimeListeners(): void {
+    if (this.unsubscribeGlobalConfig) {
+      this.unsubscribeGlobalConfig();
+      this.unsubscribeGlobalConfig = null;
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.cloudSyncTimeout) clearTimeout(this.cloudSyncTimeout);
-    if (this.unsubscribeGlobalConfig) this.unsubscribeGlobalConfig();
+    this.stopRealtimeListeners();
   }
 
   private purgeLegacyCachedUrls(): void {
@@ -222,6 +230,9 @@ export class AppStore implements OnDestroy {
   }
 
   private async loadState() {
+    if (typeof window === 'undefined') {
+      return;
+    }
     try {
       let storedSchedule: string | null = null;
       let storedCategories: string | null = null;

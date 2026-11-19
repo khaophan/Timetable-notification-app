@@ -10,10 +10,17 @@ export class GeminiService {
 
   private resolveBackendBaseUrl(): string {
     if (Capacitor.isNativePlatform()) {
-      return 'https://ais-pre-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app';
+      return 'https://ais-dev-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app';
     }
     if (typeof window !== 'undefined' && window.location?.origin) {
-      return window.location.origin;
+      const origin = window.location.origin;
+      if (
+        origin.includes('vercel.app') ||
+        (!origin.includes('localhost') && !origin.includes('127.0.0.1') && !origin.includes('run.app'))
+      ) {
+        return 'https://ais-dev-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app';
+      }
+      return origin;
     }
     return '';
   }

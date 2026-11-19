@@ -20,11 +20,30 @@ import {
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// Boot background Web Push worker & load persistent VAPID keys even in Vite SSR dev mode
-void initPushWorker();
+// Boot background Web Push worker only in live serve/runtime mode
+const isCliBuild =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  process.argv.some((a) => a === 'build' || a.endsWith('/build'));
+const isServeOrRuntime =
+  isMainModule(import.meta.url) ||
+  Boolean(process.env['pm_id']) ||
+  (typeof process !== 'undefined' &&
+    Array.isArray(process.argv) &&
+    process.argv.some((a) => a.includes('serve')));
+
+if (!isCliBuild && isServeOrRuntime) {
+  void initPushWorker();
+}
+
+app.use('/api', (_req, _res, next) => {
+  void initPushWorker();
+  next();
+});
 
 app.get('/api/push/vapidPublicKey', async (_req, res) => {
   try {
@@ -102,6 +121,7 @@ const angularApp = new AngularNodeAppEngine({
     'ais-dev-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app',
     'ais-pre-5ce7x4ii37m5xmqzzudf4v-123885007893.asia-southeast1.run.app',
   ],
+  trustProxyHeaders: true,
 });
 
 app.post('/api/gemini/parse', async (req, res) => {
@@ -289,7 +309,7 @@ app.use((req, res, next) => {
 });
 
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
-  const port = process.env['PORT'] || 4000;
+  const port = process.env['PORT'] || 3000;
   app.listen(port, (error) => {
     if (error) {
       throw error;

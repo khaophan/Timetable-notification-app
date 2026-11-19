@@ -412,39 +412,48 @@ export class App implements OnInit, OnDestroy {
         }
       }
 
-      this.unsubscribeClasses = subscribeToPublishedClassSchedules((classes) => {
-        this.publishedClasses.set(classes);
-        // Auto-sync student timetable if Admin updates the currently selected classroom
-        const selectedId = this.store.selectedClassId();
-        if (this.isStudentMode() && selectedId) {
-          const match = classes.find((c) => c.id === selectedId);
-          if (match && match.sessions.length > 0) {
-            this.store.updateSchedule(match.sessions);
-          }
-        }
-      });
-
       this.unsubscribeAuth = onAuthStateChanged(auth, (user) => {
         this.currentUser.set(user);
         this.authReady.set(true);
-        if (user && this.appStage() !== 'splash') {
-          void this.onUserSessionDetected(user);
+        if (user) {
+          this.store.startRealtimeListeners();
+          if (!this.unsubscribeClasses) {
+            this.unsubscribeClasses = subscribeToPublishedClassSchedules((classes) => {
+              this.publishedClasses.set(classes);
+              const selectedId = this.store.selectedClassId();
+              if (this.isStudentMode() && selectedId) {
+                const match = classes.find((c) => c.id === selectedId);
+                if (match && match.sessions.length > 0) {
+                  this.store.updateSchedule(match.sessions);
+                }
+              }
+            });
+          }
+          if (this.appStage() !== 'splash') {
+            void this.onUserSessionDetected(user);
+          }
+        } else {
+          this.store.stopRealtimeListeners();
+          if (this.unsubscribeClasses) {
+            this.unsubscribeClasses();
+            this.unsubscribeClasses = null;
+          }
         }
       });
     }
 
-    await this.updateNotificationPermissionStatus();
+    if (typeof window !== 'undefined') {
+      void this.updateNotificationPermissionStatus();
 
-    // Exact 5-second branded splash screen before entering gateway/app
-    const splashMs =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      // Exact 5-second branded splash screen before entering gateway/app
+      const splashMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? 1500
         : 5000;
 
-    this.splashTimer = setTimeout(() => {
-      this.finishSplash();
-    }, splashMs);
+      this.splashTimer = setTimeout(() => {
+        this.finishSplash();
+      }, splashMs);
+    }
   }
 
   ngOnDestroy(): void {
