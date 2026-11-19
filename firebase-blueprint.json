@@ -1,5 +1,30 @@
 {
   "entities": {
+    "ClassSchedule": {
+      "title": "ClassSchedule",
+      "description": "Official classroom timetable published by an administrator for a specific grade and room",
+      "type": "object",
+      "properties": {
+        "grade": { "type": "string", "description": "Grade level e.g. ม.4" },
+        "room": { "type": "string", "description": "Room number e.g. 1" },
+        "displayName": { "type": "string", "description": "Display label e.g. ม.4/1" },
+        "sessions": { "type": "array", "description": "Non-empty list of ClassSession entries" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["grade", "room", "displayName", "sessions", "updatedAt", "updatedBy"]
+    },
+    "SystemVapidKeys": {
+      "title": "SystemVapidKeys",
+      "description": "Persistent Web Push VAPID key pair managed exclusively by the backend push worker",
+      "type": "object",
+      "properties": {
+        "publicKey": { "type": "string" },
+        "privateKey": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["publicKey", "privateKey", "updatedAt"]
+    },
     "DeviceToken": {
       "title": "DeviceToken",
       "description": "FCM Device Token for background push notifications",
@@ -14,10 +39,15 @@
     },
     "BackupData": {
       "title": "BackupData",
-      "description": "JSON payload backup for student timetable and custom preferences",
+      "description": "Synced timetable, alarm-style personal schedule categories, classroom selection, and settings",
       "type": "object",
       "properties": {
         "schedule": { "type": "array" },
+        "customCategories": { "type": "array" },
+        "selectedClassId": { "type": "string" },
+        "selectedGrade": { "type": "string" },
+        "selectedRoom": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "student"] },
         "settings": { "type": "object" },
         "active": { "type": "boolean" },
         "updatedAt": { "type": "string" }
@@ -55,6 +85,11 @@
       "type": "object",
       "properties": {
         "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "student"] },
+        "selectedClassId": { "type": "string" },
+        "selectedGrade": { "type": "string" },
+        "selectedRoom": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "createdAt"]
@@ -133,17 +168,25 @@
     }
   },
   "firestore": {
+    "classSchedules/{classId}": {
+      "schema": "ClassSchedule",
+      "description": "Published grade/room timetables managed by teachers/admins and read by signed-in students"
+    },
+    "system_internal/{docId}": {
+      "schema": "SystemVapidKeys",
+      "description": "Persistent backend VAPID keys and worker secrets"
+    },
     "users/{userId}": {
       "schema": "User",
       "description": "User profiles. ID matches Firebase Auth UID."
     },
     "users/{userId}/devices/{deviceId}": {
       "schema": "DeviceToken",
-      "description": "Notification tokens mapping (legacy FCM)"
+      "description": "Notification tokens mapping"
     },
     "users/{userId}/backup/data": {
       "schema": "BackupData",
-      "description": "UserData cloud backups"
+      "description": "UserData cloud backups including custom personal alarm categories"
     },
     "users/{userId}/diagnostics/{logId}": {
       "schema": "DiagnosticLog",

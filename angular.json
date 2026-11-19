@@ -24,6 +24,14 @@
             },
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
+            "allowedCommonJsDependencies": [
+              "debug",
+              "agent-base",
+              "node-domexception",
+              "web-streams-polyfill",
+              "@grpc/grpc-js",
+              "@grpc/proto-loader"
+            ],
             "assets": [
               {
                 "glob": "**/*",
@@ -65,7 +73,10 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "externalDependencies": [
+                "@google/genai"
+              ]
             }
           },
           "defaultConfiguration": "production"

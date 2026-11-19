@@ -2,49 +2,77 @@
 <html lang="th">
   <head>
     <meta charset="utf-8" />
-    <title>ระบบตารางเรียนอัจฉริยะ (สพฐ. OBEC Core Sync)</title>
-    <meta name="description" content="ระบบสนับสนุนการจัดกิจกรรมการเรียนรู้และตารางเรียนอัจฉริยะ ตามหลักสูตรแกนกลางการศึกษาขั้นพื้นฐาน (สพฐ.) กระทรวงศึกษาธิการ สำหรับโรงเรียน มัธยมศึกษา และประถมศึกษา" />
-    <meta name="keywords" content="สพฐ, ตารางเรียน, ตารางอบรม, ปฏิทินการศึกษา, พัฒนาผู้เรียน, กระทรวงศึกษาธิการ, OBEC, timetable, school, class schedule, education, Thailand" />
+    <title>ตารางเรียนอัจฉริยะ Web Edition</title>
+    <meta name="description" content="เว็บแอปพลิเคชันแจ้งเตือนตารางเรียนอัตโนมัติจากการอ่านรูปภาพตารางเรียนด้วย AI พร้อมระบบแจ้งเตือนแบบเรียลไทม์บนเบราว์เซอร์" />
+    <meta property="og:title" content="ตารางเรียนอัจฉริยะ Web Edition" />
+    <meta property="og:description" content="เว็บแอปพลิเคชันแจ้งเตือนตารางเรียนอัตโนมัติจากการอ่านรูปภาพตารางเรียนด้วย AI พร้อมระบบแจ้งเตือนแบบเรียลไทม์บนเบราว์เซอร์" />
+    <meta name="keywords" content="สพฐ, ตารางเรียน, ปฏิทินการศึกษา, พัฒนาผู้เรียน, OBEC, timetable, school, class schedule, education, Thailand" />
     <meta name="category" content="Education" />
     <meta name="rating" content="safe for kids" />
-    <meta name="author" content="ระบบสื่อการเรียนรู้ดิจิทัล" />
+    <meta name="author" content="ClassSync OBEC" />
     <base href="/" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="/app-icon-v5.svg" />
-    <link rel="manifest" href="/manifest.json?v=10" />
-    <meta name="theme-color" content="#ffffff" />
-    <link rel="apple-touch-icon" href="/app-icon-v5.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+
+    <!-- PWA & iOS/iPadOS Meta -->
+    <link rel="icon" type="image/png" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json?v=12" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ตารางเรียน" />
+    <meta name="theme-color" content="#FAF8F5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)" />
   </head>
-  <body>
+  <body class="bg-[#FAF8F5] text-slate-900 dark:bg-[#0B1120] dark:text-slate-50 antialiased selection:bg-sky-500/20">
     <app-root></app-root>
     <script>
+      // Apply saved theme immediately before first paint to prevent flash
+      (function () {
+        try {
+          const pref = localStorage.getItem('app_theme_mode');
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (pref === 'dark' || (!pref && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+
       window.deferredPrompt = null;
-      window.addEventListener("beforeinstallprompt", (e) => {
+      window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         window.deferredPrompt = e;
-        window.dispatchEvent(new CustomEvent("pwa-install-available"));
+        window.dispatchEvent(new CustomEvent('pwa-install-available'));
       });
 
       function registerServiceWorker() {
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.register("/firebase-messaging-sw.js", { type: "module" }).then(
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/firebase-messaging-sw.js').then(
             (registration) => {
-              console.log(
-                "ServiceWorker registration successful with scope: ",
-                registration.scope,
-              );
+              console.log('ServiceWorker registration successful with scope:', registration.scope);
             },
             (err) => {
-              console.log("ServiceWorker registration failed: ", err);
-            },
+              console.warn('ServiceWorker registration failed:', err);
+            }
           );
         }
       }
 
-      if (document.readyState === "complete" || document.readyState === "interactive") {
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
         registerServiceWorker();
       } else {
-        window.addEventListener("load", registerServiceWorker);
+        window.addEventListener('load', registerServiceWorker);
       }
     </script>
   </body>

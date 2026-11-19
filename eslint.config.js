@@ -3,6 +3,7 @@ const eslint = require('@eslint/js');
 const {defineConfig} = require('eslint/config');
 const tseslint = require('typescript-eslint');
 const angular = require('angular-eslint');
+const firebaseRules = require('@firebase/eslint-plugin-security-rules');
 
 module.exports = defineConfig([
   {
@@ -40,5 +41,6 @@ module.exports = defineConfig([
       angular.configs.templateAccessibility,
     ],
     rules: {},
-  }
+  },
+  firebaseRules.flatRecommended,
 ]);

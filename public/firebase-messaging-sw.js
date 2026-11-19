@@ -1,126 +1,41 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getMessaging, onBackgroundMessage } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-sw.js";
+/* ClassSync OBEC — Service Worker for iPadOS / iOS / Android / Desktop Web Push & Offline Shell */
 
-// Initialize the Firebase app in the service worker by passing in the
-// messagingSenderId.
-// Note: This must be the identical configuration as your web app.
-const firebaseConfig = {
-  apiKey: "AIzaSyA1lzZpO5G-T9V-Kp_Tve31O8rIH0eldDk",
-  authDomain: "gen-lang-client-0556152514.firebaseapp.com",
-  projectId: "gen-lang-client-0556152514",
-  storageBucket: "gen-lang-client-0556152514.firebasestorage.app",
-  messagingSenderId: "227977579604",
-  appId: "1:227977579604:web:6b5018e15f6e9949bab1c1",
-};
-
-try {
-  const app = initializeApp(firebaseConfig);
-  const messaging = getMessaging(app);
-
-  onBackgroundMessage(messaging, (payload) => {
-    console.log(
-      "[firebase-messaging-sw.js] Received background FCM message ",
-      payload,
-    );
-    const notificationTitle =
-      payload.notification?.title || payload.data?.title || "แจ้งเตือนตารางเรียน";
-    const notificationOptions = {
-      body: payload.notification?.body || payload.data?.body,
-      icon: "/app-icon-192-v5.png",
-      badge: "/app-icon-192-v5.png",
-      data: payload.data || { url: '/' },
-      vibrate: [200, 100, 200]
-    };
-
-    self.registration.showNotification(notificationTitle, notificationOptions);
-  });
-} catch (err) {
-  console.warn("Firebase Messaging SDK failed to initialize in service worker (expected if offline or blocked):", err);
-}
-
-// Standard Web Push API Handler (for generic subscriptions)
-self.addEventListener('push', function(event) {
-  console.log('[firebase-messaging-sw.js] Standard Push Received.');
-
-  let data = {};
-  if (event.data) {
-    try {
-      data = event.data.json();
-    } catch (e) {
-      data = { body: event.data.text() };
-    }
-  }
-
-  const title = data.title || "แจ้งเตือนแอปพลิเคชัน";
-  const options = {
-    body: data.body || "คุณมีข้อความใหม่",
-    icon: data.icon || "/app-icon-192-v5.png",
-    badge: data.badge || "/app-icon-192-v5.png",
-    data: data.data || { url: '/' },
-    vibrate: [200, 100, 200]
-  };
-
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener('notificationclick', function(event) {
-  console.log('[firebase-messaging-sw.js] Notification click Received.', event);
-  
-  event.notification.close();
-  
-  const urlToOpen = (event.notification.data && event.notification.data.url) ? 
-                    new URL(event.notification.data.url, self.location.origin).href : 
-                    new URL('/', self.location.origin).href;
-
-  const promiseChain = clients.matchAll({
-    type: 'window',
-    includeUncontrolled: true
-  }).then((windowClients) => {
-    let matchingClient = null;
-    for (let i = 0; i < windowClients.length; i++) {
-      const windowClient = windowClients[i];
-      if (windowClient.url === urlToOpen || windowClient.url === self.location.origin + '/') {
-        matchingClient = windowClient;
-        break;
-      }
-    }
-    if (matchingClient) {
-      return matchingClient.focus();
-    } else {
-      return clients.openWindow(urlToOpen);
-    }
-  });
-
-  event.waitUntil(promiseChain);
-});
-
-const CACHE_NAME = 'timetable-cache-v8';
+const CACHE_NAME = 'classsync-shell-v12';
 const URLS_TO_CACHE = [
   '/',
-  '/index.html',
   '/manifest.json',
-  '/app-icon-192.png',
-  '/app-icon-512.png',
-  '/app-icon.svg'
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(URLS_TO_CACHE))
+      .then((cache) =>
+        Promise.allSettled(
+          URLS_TO_CACHE.map((url) =>
+            cache.add(url).catch((err) => {
+              console.warn('[SW] Precache skipped for', url, err);
+            })
+          )
+        )
+      )
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    }).then(() => self.clients.claim())
+    caches.keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames
+            .filter((name) => name !== CACHE_NAME)
+            .map((name) => caches.delete(name))
+        )
+      )
+      .then(() => self.clients.claim())
   );
 });
 
@@ -130,34 +45,175 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Handle standard Web Push API events (works when iPadOS Safari PWA is closed or force-swiped)
+self.addEventListener('push', (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { body: event.data.text() };
+    }
+  }
+
+  const title = data.title || 'แจ้งเตือนตารางเรียน';
+  const options = {
+    body: data.body || 'ถึงเวลาเข้าเรียนตามตารางของคุณแล้ว',
+    icon: data.icon || '/pwa-192x192.png',
+    badge: data.badge || '/pwa-192x192.png',
+    tag: data.tag || 'classsync-alert',
+    renotify: true,
+    requireInteraction: false,
+    vibrate: [220, 100, 220],
+    actions: [
+      { action: 'snooze-5m', title: 'เลื่อนเตือน 5 นาที' },
+      { action: 'open-app', title: 'เปิดดูตารางเรียน' }
+    ],
+    data: {
+      url: data.url || '/',
+      userId: data.userId || '',
+      title: title,
+      body: data.body || '',
+      allowSnooze: data.allowSnooze !== false
+    }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Handle notification interaction & Snooze 5 minutes
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const notifData = event.notification.data || {};
+
+  if (event.action === 'snooze-5m') {
+    const snoozeTitle = notifData.title || 'แจ้งเตือนตารางเรียน (เลื่อนเตือน)';
+    const snoozeBody = notifData.body || 'ครบกำหนดเวลาเลื่อนเตือน 5 นาทีแล้ว';
+    const userId = notifData.userId || '';
+
+    const snoozeWork = Promise.resolve()
+      .then(() => {
+        if (!userId) return null;
+        return fetch('/api/push/snooze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            title: snoozeTitle,
+            body: snoozeBody,
+            delaySeconds: 300
+          })
+        }).catch((err) => {
+          console.warn('[SW] Server snooze failed, using local fallback:', err);
+          return null;
+        });
+      })
+      .then(() =>
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+          for (const client of windowClients) {
+            client.postMessage({
+              type: 'CLASSSYNC_SNOOZE_5M',
+              title: snoozeTitle,
+              body: snoozeBody,
+              snoozeUntil: Date.now() + 300000
+            });
+          }
+        })
+      );
+
+    event.waitUntil(snoozeWork);
+    return;
+  }
+
+  const urlToOpen = notifData.url
+    ? new URL(notifData.url, self.location.origin).href
+    : new URL('/', self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const windowClient of windowClients) {
+        if (windowClient.url.startsWith(self.location.origin) && 'focus' in windowClient) {
+          return windowClient.focus();
+        }
+      }
+      return clients.openWindow(urlToOpen);
+    })
+  );
+});
+
+// Auto-renew Web Push subscription if Safari / Chrome rotates push endpoints
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const res = await fetch('/api/push/vapidPublicKey');
+        const json = await res.json();
+        const publicKey = json.publicKey;
+        if (!publicKey) return;
+
+        const padding = '='.repeat((4 - (publicKey.length % 4)) % 4);
+        const base64 = (publicKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+        }
+
+        const newSub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: outputArray
+        });
+
+        const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of windowClients) {
+          client.postMessage({
+            type: 'PUSH_SUBSCRIPTION_CHANGED',
+            subscription: JSON.parse(JSON.stringify(newSub))
+          });
+        }
+      } catch (err) {
+        console.warn('[SW] pushsubscriptionchange handler error:', err);
+      }
+    })()
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
     return;
   }
-  
-  // Bypassing API and Firebase/Firestore network requests from cache
-  if (event.request.url.includes('/api/') || event.request.url.includes('firebase') || event.request.url.includes('firestore')) {
+
+  const reqUrl = event.request.url;
+  if (
+    reqUrl.includes('/api/') ||
+    reqUrl.includes('firebase') ||
+    reqUrl.includes('firestore') ||
+    reqUrl.includes('googleapis') ||
+    reqUrl.includes('__vite')
+  ) {
     return;
   }
-  
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          // Update cache with fresh version
-          cache.put(event.request, networkResponse.clone());
+      const networkFetch = fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
           return networkResponse;
+        })
+        .catch(() => {
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+          return cachedResponse || Response.error();
         });
-      }).catch(() => {
-        // Network failed (offline)
-        if (event.request.mode === 'navigate') {
-          return caches.match('/'); // Return root index.html if navigating
-        }
-        return null;
-      });
 
-      // Return cached response immediately if available, while fetching in background
-      return cachedResponse || fetchPromise;
+      return cachedResponse || networkFetch;
     })
   );
 });

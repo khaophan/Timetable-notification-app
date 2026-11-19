@@ -1,3 +1,6 @@
+export type UserRole = 'admin' | 'student';
+export type ThemeMode = 'light' | 'dark';
+
 export interface ClassSession {
   id: string;
   dayOfWeek: string;
@@ -7,6 +10,25 @@ export interface ClassSession {
   subjectName: string;
   room: string;
   teacher: string;
+  sourceCategoryId?: string;
+  sourceCategoryName?: string;
+}
+
+export interface PersonalScheduleCategory {
+  id: string;
+  name: string;
+  enabled: boolean;
+  sessions: ClassSession[];
+}
+
+export interface ClassScheduleDoc {
+  id: string;
+  grade: string;
+  room: string;
+  displayName: string;
+  sessions: ClassSession[];
+  updatedAt: string;
+  updatedBy: string;
 }
 
 export interface AppSettings {
@@ -15,17 +37,24 @@ export interface AppSettings {
   notifySubjectName: boolean;
   notifyRoom: boolean;
   notifyEnd: boolean;
-  notificationSound?: string; // Base64 storage
-  popupDuration: number; // in seconds
-  preNotifyMinutes?: number; // Minutes before class starts (default: 3)
-  calendarHolidays?: Record<string, string>; // YYYY-MM-DD -> Holiday Name
+  notificationSound?: string;
+  popupDuration: number;
+  preNotifyMinutes?: number;
+  calendarHolidays?: Record<string, string>;
+  themeMode?: ThemeMode;
 }
 
 export interface ActiveNotification {
   title: string;
   body: string;
   type: 'start' | 'end';
+  allowSnooze?: boolean;
 }
+
+export const GRADE_LEVELS = [
+  'ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6',
+  'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6',
+];
 
 export const DEFAULT_SUBJECT_MAPPINGS: Record<string, string> = {
   'ว30103': 'วิทยาการคำนวณ',
@@ -43,6 +72,5 @@ export const DEFAULT_SUBJECT_MAPPINGS: Record<string, string> = {
   'ศ31101': 'ดนตรี/ศิลปะ',
   'ว31241': 'ชีววิทยา',
   'ส31103': 'ประวัติศาสตร์',
-  'ง31101': 'การงานอาชีพ'
+  'ง31101': 'การงานอาชีพ',
 };
-
